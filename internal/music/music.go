@@ -189,6 +189,11 @@ type AlbumCommentWriter interface {
 	PostAlbumComment(id, text, replyTo string) (*Comment, error)
 }
 
+// AlbumCommentLiker is an optional capability of sources with album comments.
+type AlbumCommentLiker interface {
+	LikeAlbumComment(albumID, commentID string, on bool) error
+}
+
 // TrackCommentReplier is an optional capability of sources with track comments.
 type TrackCommentReplier interface {
 	ReplyComment(trackID, commentID, text string) (*Comment, error)

@@ -268,6 +268,10 @@ func (p *Plugin) AlbumComments(id string, offset int) (*music.CommentPage, error
 	return &page, nil
 }
 
+func (p *Plugin) LikeAlbumComment(albumID, commentID string, on bool) error {
+	return p.call("likeAlbumComment", map[string]any{"id": albumID, "commentId": commentID, "on": on}, nil)
+}
+
 func (p *Plugin) LikeComment(trackID, commentID string, on bool) error {
 	return p.call("likeComment", map[string]any{"trackId": trackID, "commentId": commentID, "on": on}, nil)
 }

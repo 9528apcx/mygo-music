@@ -99,6 +99,7 @@ Export a function for each thing the plugin does. Each takes one object of param
 | `comments` | `{trackId, offset}` | `{comments, total, more}` |
 | `albumComments` | `{id, offset}` | `{comments, total, more}` |
 | `postAlbumComment` | `{id, text, replyTo}`; `replyTo` is empty for a new comment | `Comment` |
+| `likeAlbumComment` | `{id, commentId, on}` |
 | `likeComment` | `{trackId, commentId, on}` | |
 | `postComment` | `{trackId, text}` | `Comment` |
 | `replyComment` | `{trackId, commentId, text}` | `Comment` |

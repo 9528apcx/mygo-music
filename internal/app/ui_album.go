@@ -21,6 +21,7 @@ type albumData struct {
 	comments      []music.Comment
 	commentsPaged paged
 	commentComposer
+	likesPending map[string]bool
 }
 
 const (
@@ -225,8 +226,10 @@ func (a *app) albumCommentList(c *ui.Context, lib *library, d *albumData, id str
 	if !pg.loaded && !pg.loading && pg.err == "" {
 		next()
 	}
+	liker, canLike := source.(music.AlbumCommentLiker)
+	canLike = canLike && lib.src.Can("likeAlbumComment")
 	for i := range d.comments {
-		a.albumCommentRow(c.Key(i), lib, d, &d.comments[i], canPost)
+		a.albumCommentRow(c.Key(i), lib, d, &d.comments[i], canPost, liker, canLike)
 	}
 	switch {
 	case pg.loading:
@@ -245,18 +248,24 @@ func (a *app) albumCommentList(c *ui.Context, lib *library, d *albumData, id str
 	}
 }
 
-func (a *app) albumCommentRow(c *ui.Context, lib *library, d *albumData, cm *music.Comment, canPost bool) {
+func (a *app) albumCommentRow(c *ui.Context, lib *library, d *albumData, cm *music.Comment, canPost bool, liker music.AlbumCommentLiker, canLike bool) {
 	p := a.pal
 	ui.Row(c).Gap(14).Padding(16, 0, 10, 0).BorderWidth(0, 0, 1, 0).BorderColor(p.hairline).AlignItems(ui.Start).Children(func() {
 		a.avatar(c.Key("avatar"), cm.AvatarURL, 36, p.hover.Over(p.bg))
 		ui.Column(c.Key("body")).Grow(1).Shrink(1).MinWidth(0).Gap(6).Children(func() {
 			ui.Text(c, cm.Author).FontSize(14).FontWeight(600).TextColor(p.text)
 			ui.Text(c, cm.Text).FontSize(15).LineHeight(1.5).TextColor(p.text)
-			ui.Row(c.Key("meta")).Gap(12).AlignItems(ui.Center).Children(func() {
+			ui.Row(c.Key("meta")).Gap(6).AlignItems(ui.Center).Children(func() {
 				if cm.Time > 0 {
 					ui.Text(c, i18n.Date(time.UnixMilli(cm.Time).Local())).FontSize(12).TextColor(p.muted)
 				}
 				ui.Spacer(c)
+				if a.commentLike(c.Key("like"), cm, p.muted, canLike, d.likesPending[cm.ID]) {
+					albumID, commentID := d.album.Album.ID, cm.ID
+					a.toggleCommentLike(lib, cm, &d.likesPending,
+						func() *music.Comment { return findComment(d.comments, commentID) },
+						func(on bool) error { return liker.LikeAlbumComment(albumID, commentID, on) })
+				}
 				if canPost {
 					a.commentReplyButton(c.Key("reply"), lib, &d.commentComposer, cm, p.muted)
 				}

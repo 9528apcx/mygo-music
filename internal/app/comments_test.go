@@ -93,7 +93,7 @@ func TestLikeComment(t *testing.T) {
 		like      bool
 	}
 	calls := make(chan call, 4)
-	a, tt, _ := commentsApp()
+	a, tt, ch := commentsApp()
 	fake(a).likeComment = func(track, id string, like bool) error { calls <- call{track, id, like}; return nil }
 	if err := tt.Click("Like"); err != nil {
 		t.Fatal(err)
@@ -104,6 +104,7 @@ func TestLikeComment(t *testing.T) {
 	if cm := a.comments.list[0]; !cm.Liked || cm.Likes != 42 {
 		t.Fatalf("liked %v by %d", cm.Liked, cm.Likes)
 	}
+	until(t, ch, func() bool { return !a.comments.likesPending["9"] })
 	tt.Frame()
 	if err := tt.Click("Unlike"); err != nil {
 		t.Fatal(err)

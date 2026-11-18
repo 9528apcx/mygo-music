@@ -832,3 +832,63 @@ func TestAlbumTabsStayAvailableAfterScrollingDetails(t *testing.T) {
 		t.Fatal("did not switch back to songs")
 	}
 }
+
+// Likes stay with the selected album comment and undo a rejected change.
+func TestLikeAlbumComment(t *testing.T) {
+	a := catalogApp()
+	ch := posts(a)
+	calls := make(chan [3]string, 2)
+	a.library.src = &testAlbumLiker{Source: a.library.src, sent: calls}
+	a.account = &music.Account{ID: "7"}
+	d := a.albums["8"]
+	d.album.HasComments, d.commentsPaged.loaded = true, true
+	d.comments = []music.Comment{{ID: "17", Author: "Listener", Text: "An album comment", Likes: 3}}
+	a.open(route{page: pageAlbum, id: "8"})
+	tt := ui.NewTester(a.view, 880, 700)
+	tt.Frame()
+	if err := tt.Click("Comments"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("Like"); err != nil {
+		t.Fatal(err)
+	}
+	if got := wait(t, calls, "album like"); got != ([3]string{"8", "17", "true"}) {
+		t.Fatalf("posted %+v", got)
+	}
+	if cm := d.comments[0]; !cm.Liked || cm.Likes != 4 {
+		t.Fatalf("like was not applied locally: %+v", cm)
+	}
+	until(t, ch, func() bool { return !d.likesPending["17"] })
+	tt.Frame()
+	if err := tt.Click("Unlike"); err != nil {
+		t.Fatal(err)
+	}
+	if got := wait(t, calls, "album unlike"); got != ([3]string{"8", "17", "false"}) {
+		t.Fatalf("posted %+v", got)
+	}
+	until(t, ch, func() bool { return !d.likesPending["17"] })
+	if cm := d.comments[0]; !cm.Liked || cm.Likes != 4 {
+		t.Fatalf("rejected unlike was not reverted: %+v", cm)
+	}
+}
+
+type testAlbumLiker struct {
+	music.Source
+	sent chan [3]string
+}
+
+func (s *testAlbumLiker) Can(what string) bool {
+	return what == "likeAlbumComment" || s.Source.Can(what)
+}
+
+func (s *testAlbumLiker) AlbumComments(string, int) (*music.CommentPage, error) {
+	return &music.CommentPage{}, nil
+}
+
+func (s *testAlbumLiker) LikeAlbumComment(id, commentID string, on bool) error {
+	s.sent <- [3]string{id, commentID, fmt.Sprint(on)}
+	if !on {
+		return errors.New("offline")
+	}
+	return nil
+}

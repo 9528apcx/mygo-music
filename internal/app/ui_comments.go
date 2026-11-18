@@ -25,6 +25,7 @@ type commentState struct {
 	err     string
 	scroll  ui.ScrollState
 	commentComposer
+	likesPending map[string]bool
 }
 
 // commentsFor makes the comments those of tr, loading their first page
@@ -281,8 +282,10 @@ func commentBox(c *ui.Context, cs *commentComposer, fg, muted, surface ui.Color,
 	})
 }
 
+const commentActionSize = 16
+
 func (a *app) commentReplyButton(c *ui.Context, lib *library, cs *commentComposer, cm *music.Comment, color ui.Color) {
-	if cm.ID == "" || !iconButton(c, iconComment, 16, color, T("Reply")).Disabled(cs.posting).Clicked() {
+	if cm.ID == "" || !iconButton(c, iconComment, commentActionSize, color, T("Reply")).Disabled(cs.posting).Clicked() {
 		return
 	}
 	if lib.signedOut() {
@@ -333,102 +336,105 @@ func (a *app) commentRow(c *ui.Context, cm *music.Comment, now time.Time, canRep
 	ui.Row(c).Padding(12).Gap(12).Radius(12).AlignItems(ui.Start).Children(func() {
 		a.avatar(c, cm.AvatarURL, 34, white.Alpha(0.1))
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(6).Children(func() {
-			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, cm.Author).FontSize(13).FontWeight(600).TextColor(white.Alpha(0.6)).SingleLine().Shrink(1).MinWidth(0)
-				ui.Spacer(c)
-				a.commentLike(c.Key("like"), cm)
-			})
+			ui.Text(c, cm.Author).FontSize(13).FontWeight(600).TextColor(white.Alpha(0.6)).SingleLine().Shrink(1).MinWidth(0)
 			ui.Text(c, cm.Text).FontSize(15).LineHeight(1.55).TextColor(white.Alpha(0.92))
-			ui.Row(c.Key("comment-meta")).AlignItems(ui.Center).Children(func() {
+			ui.Row(c.Key("comment-meta")).Gap(6).AlignItems(ui.Center).Children(func() {
 				if cm.Time > 0 {
 					ui.Text(c, i18n.Ago(time.UnixMilli(cm.Time), now)).FontSize(11.5).TextColor(white.Alpha(0.38))
 				}
+				cs := &a.comments
+				lib, track, trackID, id := cs.lib, cs.track, cs.id, cm.ID
+				color := white.Alpha(0.65)
+				ui.Spacer(c)
+				if a.commentLike(c.Key("like"), cm, color, lib.can("likeComment"), cs.likesPending[id]) {
+					a.toggleCommentLike(lib, cm, &cs.likesPending, func() *music.Comment {
+						if cs.track != track {
+							return nil
+						}
+						return findComment(cs.list, id)
+					}, func(on bool) error { return lib.src.LikeComment(trackID, id, on) })
+				}
 				if canReply {
-					ui.Spacer(c)
-					cs := &a.comments
-					a.commentReplyButton(c.Key("reply"), cs.lib, &cs.commentComposer, cm, white.Alpha(0.65))
+					a.commentReplyButton(c.Key("reply"), lib, &cs.commentComposer, cm, color)
 				}
 			})
 		})
 	})
 }
 
-// commentLike is a comment's thumb, with how many liked it, which likes it
-// or unlikes it, if the source lets it: in red once liked.
-func (a *app) commentLike(c *ui.Context, cm *music.Comment) {
-	can := a.comments.lib.can("likeComment")
+// commentLike uses the same borderless target and icon size as Reply.
+func (a *app) commentLike(c *ui.Context, cm *music.Comment, fg ui.Color, can, pending bool) bool {
+	can = can && cm.ID != ""
 	if !can && cm.Likes == 0 {
-		return
+		return false
 	}
-	label, fg := T("Like"), white.Alpha(0.42)
+	label, icon := T("Like"), iconThumb
 	if cm.Liked {
-		label, fg = T("Unlike"), a.pal.accent
+		label, icon, fg = T("Unlike"), iconThumbFill, a.pal.accent
 	}
-	b := ui.ButtonBase(c).Gap(4).Padding(3, 6).Margin(-3, -6).Radius(999).AlignItems(ui.Center).FocusRing(false).Label(label).Disabled(!can)
-	if b.Hovered() && !cm.Liked && can {
-		fg = white.Alpha(0.75)
+	b := roundButton(c, commentActionSize, fg, label).Disabled(!can || pending).Gap(4)
+	var n string
+	if cm.Likes > 0 {
+		n = count(cm.Likes)
+		w, _ := c.MeasureText(0, ui.Span{Text: n, Size: 12})
+		b.Width(commentActionSize + 20 + w)
 	}
-	b.TextColor(b.AnimateColor("fg", fg, ui.Animation{Duration: 120 * time.Millisecond}))
 	b.Children(func() {
-		icon := iconThumb
-		if cm.Liked {
-			icon = iconThumbFill
-		}
-		ui.Icon(c, icon).Size(13, 13)
-		if cm.Likes > 0 {
-			ui.Text(c, count(cm.Likes)).FontSize(12).FontFeatures("tnum")
+		ui.Icon(c, icon).Size(commentActionSize, commentActionSize)
+		if n != "" {
+			ui.Text(c, n).FontSize(12).FontFeatures("tnum")
 		}
 	})
-	if b.Clicked() {
-		a.toggleCommentLike(cm.ID)
-	}
+	return b.Clicked()
 }
 
-// toggleCommentLike likes a comment, or unlikes it, at once in the app and
-// then with the source, which may refuse: it goes back then. Signed out, it
-// asks the listener to sign in.
-func (a *app) toggleCommentLike(id string) {
-	cs := &a.comments
-	lib := cs.lib
+// Keep each comment's likes in order and bring back the old state if it fails.
+func (a *app) toggleCommentLike(lib *library, cm *music.Comment, pending *map[string]bool, find func() *music.Comment, request func(bool) error) {
 	if lib.signedOut() {
 		a.promptSignIn(lib)
 		return
 	}
-	track, trackID, like := cs.track, cs.id, true
-	if cm := cs.find(id); cm != nil {
-		like = !cm.Liked
+	if *pending == nil {
+		*pending = make(map[string]bool)
 	}
-	cs.setLiked(id, like)
+	queue, id := *pending, cm.ID
+	if queue[id] {
+		return
+	}
+	queue[id] = true
+	was := cm.Liked
+	setCommentLiked(cm, !was)
 	go func() {
-		err := lib.src.LikeComment(trackID, id, like)
+		err := request(!was)
 		a.post(func() {
-			if err != nil && cs.track == track {
-				cs.setLiked(id, !like)
-				a.actionFailed(lib, err, T("That didn't work. Try again later."))
+			delete(queue, id)
+			if err != nil {
+				if current := find(); current != nil {
+					setCommentLiked(current, was)
+					a.actionFailed(lib, err, T("That didn't work. Try again later."))
+				}
 			}
 		})
 	}()
 }
 
-// find returns the comment id, or nil.
-func (cs *commentState) find(id string) *music.Comment {
-	for i := range cs.list {
-		if cs.list[i].ID == id {
-			return &cs.list[i]
+func findComment(list []music.Comment, id string) *music.Comment {
+	for i := range list {
+		if list[i].ID == id {
+			return &list[i]
 		}
 	}
 	return nil
 }
 
-// setLiked marks the comment id liked, or not, counting the listener in or
-// out.
-func (cs *commentState) setLiked(id string, like bool) {
-	if cm := cs.find(id); cm != nil && cm.Liked != like {
-		cm.Liked = like
-		if like {
-			cm.Likes++
-		} else {
-			cm.Likes = max(cm.Likes-1, 0)
-		}
+func setCommentLiked(cm *music.Comment, on bool) {
+	if cm.Liked == on {
+		return
+	}
+	cm.Liked = on
+	if on {
+		cm.Likes++
+	} else {
+		cm.Likes = max(cm.Likes-1, 0)
 	}
 }
