@@ -250,12 +250,10 @@ func (a *app) albumCommentRow(c *ui.Context, lib *library, d *albumData, id stri
 			ui.Text(c, cm.Author).FontSize(14).FontWeight(600).TextColor(p.text)
 			ui.Text(c, cm.Text).FontSize(15).LineHeight(1.5).TextColor(p.text)
 			ui.Row(c.Key("meta")).Gap(12).AlignItems(ui.Center).Children(func() {
-				if cm.AuthorID != "" {
-					ui.Text(c, "ID: "+cm.AuthorID).FontSize(12).TextColor(p.muted)
-				}
 				if cm.Time > 0 {
 					ui.Text(c, i18n.Date(time.UnixMilli(cm.Time).Local())).FontSize(12).TextColor(p.muted)
 				}
+				ui.Spacer(c)
 				if canPost && cm.ID != "" && d.replyTo == "" && ui.Button(c.Key("reply"), T("Reply")).Disabled(d.posting).Clicked() {
 					if lib.signedOut() {
 						a.promptSignIn(lib)
