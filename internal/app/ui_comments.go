@@ -24,8 +24,7 @@ type commentState struct {
 	loading bool
 	err     string
 	scroll  ui.ScrollState
-	draft   string // what the listener is writing
-	posting bool
+	commentComposer
 }
 
 // commentsFor makes the comments those of tr, loading their first page
@@ -163,8 +162,14 @@ func count(n int) string { return i18n.Count(n) }
 // view, under a place to write one, if the source takes them.
 func (a *app) commentsPane(c *ui.Context, tr *music.Track) {
 	cs := a.commentsFor(tr)
-	if cs.lib.can("postComment") {
-		a.commentBox(c, cs)
+	_, canReply := cs.lib.src.(music.TrackCommentReplier)
+	canReply = canReply && cs.lib.src.Can("replyComment")
+	if cs.lib.can("postComment") || canReply && cs.replyID != "" {
+		ui.Column(c.Key("composer")).Padding(0, 8, 0, 0).Children(func() {
+			commentBox(c, &cs.commentComposer, white, white.Alpha(0.65), white.Alpha(0.14), false, func(text, replyID string) {
+				a.postComment(cs, text, replyID)
+			})
+		})
 	}
 	if len(cs.list) == 0 {
 		if cs.loading || !cs.loaded && cs.err == "" {
@@ -195,7 +200,7 @@ func (a *app) commentsPane(c *ui.Context, tr *music.Track) {
 	scroll.Children(func() {
 		ui.Column(c).Gap(2).Children(func() {
 			for i := range cs.list {
-				a.commentRow(c.Key(cs.list[i].ID), &cs.list[i], now)
+				a.commentRow(c.Key(cs.list[i].ID), &cs.list[i], now, canReply)
 			}
 			if cs.loading {
 				commentSkeleton(c.Key("more"), npShimmer(c), 2)
@@ -224,35 +229,86 @@ func (a *app) commentsPane(c *ui.Context, tr *music.Track) {
 	}
 }
 
-// commentBox is where the listener writes a comment.
-func (a *app) commentBox(c *ui.Context, cs *commentState) {
-	ui.Row(c.Key("comment-box")).Gap(8).AlignItems(ui.Center).Margin(0, 8, 8, 0).Children(func() {
-		in := ui.TextInput(c.Key("draft"), &cs.draft).Placeholder(T("Write a comment…")).Label(T("Write a comment…")).FontSize(13.5).Grow(1).Shrink(1).MinWidth(0)
-		send := pillButton(c.Key("send"), nil, T("Post"), white.Alpha(0.14), white)
-		if strings.TrimSpace(cs.draft) == "" || cs.posting {
-			send.Disabled(true).Opacity(0.5)
+// The two tabs share the composer, with a separate draft for the selected reply.
+type commentComposer struct {
+	draft, replyDraft    string
+	replyID, replyAuthor string
+	posting, focus       bool
+}
+
+func (cs *commentComposer) sent(replyID string) {
+	if replyID != "" {
+		cs.replyID, cs.replyAuthor, cs.replyDraft = "", "", ""
+	} else {
+		cs.draft = ""
+	}
+}
+
+func commentBox(c *ui.Context, cs *commentComposer, fg, muted, surface ui.Color, loading bool, submit func(text, replyID string)) {
+	replyID := cs.replyID
+	draft, placeholder := &cs.draft, T("Write a comment…")
+	if replyID != "" {
+		draft, placeholder = &cs.replyDraft, T("Write a reply…")
+	}
+	ui.Column(c).Gap(4).Padding(8, 0, 12, 0).Children(func() {
+		if replyID != "" {
+			label := T("Reply")
+			if cs.replyAuthor != "" {
+				label = Tf("Replying to %s", cs.replyAuthor)
+			}
+			ui.Text(c, label).FontSize(12).TextColor(muted).SingleLine()
 		}
-		if send.Clicked() || in.Submitted() {
-			a.postComment(cs)
-		}
+		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+			in := ui.TextInput(c.Key("draft"), draft).Placeholder(placeholder).Label(placeholder).
+				Grow(1).Shrink(1).MinWidth(0).Height(36).Radius(10).BorderWidth(0).Background(surface).
+				TextColor(fg).PlaceholderColor(muted).Disabled(cs.posting)
+			if cs.focus {
+				in.Focus(ui.FocusOptions{PreventScroll: true})
+				cs.focus = false
+			}
+			text := strings.TrimSpace(*draft)
+			busy := cs.posting || loading
+			send := pillButton(c.Key("send"), nil, T("Post"), surface, fg).Disabled(text == "" || busy)
+			if replyID != "" && pillButton(c.Key("cancel"), nil, T("Cancel"), ui.Transparent, muted).Disabled(cs.posting).Clicked() {
+				cs.sent(replyID)
+				cs.focus = true
+				return
+			}
+			if !busy && text != "" && (send.Clicked() || in.Submitted()) {
+				submit(text, replyID)
+			}
+		})
 	})
 }
 
-// postComment posts what the listener wrote, showing it first of the comments
-// once the source took it.
-func (a *app) postComment(cs *commentState) {
-	text := strings.TrimSpace(cs.draft)
-	lib, track, id := cs.lib, cs.track, cs.id
-	if text == "" || cs.posting || lib == nil {
+func (a *app) commentReplyButton(c *ui.Context, lib *library, cs *commentComposer, cm *music.Comment, color ui.Color) {
+	if cm.ID == "" || !iconButton(c, iconComment, 16, color, T("Reply")).Disabled(cs.posting).Clicked() {
 		return
 	}
 	if lib.signedOut() {
 		a.promptSignIn(lib)
 		return
 	}
+	cs.replyID, cs.replyAuthor, cs.focus = cm.ID, cm.Author, true
+}
+
+// postComment posts what the listener wrote, showing it first of the comments
+// once the source took it.
+func (a *app) postComment(cs *commentState, text, replyID string) {
+	lib, track, id := cs.lib, cs.track, cs.id
+	if lib.signedOut() {
+		a.promptSignIn(lib)
+		return
+	}
 	cs.posting = true
 	go func() {
-		cm, err := lib.src.PostComment(id, text)
+		var cm *music.Comment
+		var err error
+		if replyID != "" {
+			cm, err = lib.src.(music.TrackCommentReplier).ReplyComment(id, replyID, text)
+		} else {
+			cm, err = lib.src.PostComment(id, text)
+		}
 		a.post(func() {
 			if cs.track != track {
 				return
@@ -262,7 +318,7 @@ func (a *app) postComment(cs *commentState) {
 				a.actionFailed(lib, err, T("Couldn't post your comment. Try again later."))
 				return
 			}
-			cs.draft = ""
+			cs.sent(replyID)
 			if cm != nil {
 				cs.list = append([]music.Comment{*cm}, cs.list...)
 				cs.total++
@@ -273,7 +329,7 @@ func (a *app) postComment(cs *commentState) {
 
 // commentRow is a comment: who wrote it, what, when, and how many liked it,
 // with a thumb to like it too.
-func (a *app) commentRow(c *ui.Context, cm *music.Comment, now time.Time) {
+func (a *app) commentRow(c *ui.Context, cm *music.Comment, now time.Time, canReply bool) {
 	ui.Row(c).Padding(12).Gap(12).Radius(12).AlignItems(ui.Start).Children(func() {
 		a.avatar(c, cm.AvatarURL, 34, white.Alpha(0.1))
 		ui.Column(c).Grow(1).Shrink(1).MinWidth(0).Gap(6).Children(func() {
@@ -283,9 +339,16 @@ func (a *app) commentRow(c *ui.Context, cm *music.Comment, now time.Time) {
 				a.commentLike(c.Key("like"), cm)
 			})
 			ui.Text(c, cm.Text).FontSize(15).LineHeight(1.55).TextColor(white.Alpha(0.92))
-			if cm.Time > 0 {
-				ui.Text(c, i18n.Ago(time.UnixMilli(cm.Time), now)).FontSize(11.5).TextColor(white.Alpha(0.38))
-			}
+			ui.Row(c.Key("comment-meta")).AlignItems(ui.Center).Children(func() {
+				if cm.Time > 0 {
+					ui.Text(c, i18n.Ago(time.UnixMilli(cm.Time), now)).FontSize(11.5).TextColor(white.Alpha(0.38))
+				}
+				if canReply {
+					ui.Spacer(c)
+					cs := &a.comments
+					a.commentReplyButton(c.Key("reply"), cs.lib, &cs.commentComposer, cm, white.Alpha(0.65))
+				}
+			})
 		})
 	})
 }

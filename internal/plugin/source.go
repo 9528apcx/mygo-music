@@ -280,6 +280,14 @@ func (p *Plugin) PostComment(trackID, text string) (*music.Comment, error) {
 	return &cm, nil
 }
 
+func (p *Plugin) ReplyComment(trackID, commentID, text string) (*music.Comment, error) {
+	var cm music.Comment
+	if err := p.call("replyComment", map[string]string{"trackId": trackID, "commentId": commentID, "text": text}, &cm); err != nil {
+		return nil, err
+	}
+	return &cm, nil
+}
+
 // Played tells the plugin a track plays, if it has "played": for its recent
 // list, or whatever else it wants to know that for.
 func (p *Plugin) Played(t music.Track) {

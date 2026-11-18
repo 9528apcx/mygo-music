@@ -229,3 +229,53 @@ func TestCommentPagesOverlap(t *testing.T) {
 		t.Errorf("listed %v, %d more asked", ids, len(asked))
 	}
 }
+
+// The song's existing composer replies to the selected comment and keeps its new-comment draft.
+func TestReplyToTrackComment(t *testing.T) {
+	a, tt, ch := commentsApp()
+	src := &testTrackReplier{Source: a.library.src, sent: make(chan [3]string, 1)}
+	a.library.src = src
+	a.comments.list[0].Author = "Listener"
+	if err := tt.Click("Write a comment…"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Type("My draft")
+	if err := tt.Click("Reply"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := tt.Find("Replying to Listener"); !ok {
+		t.Fatal("song composer did not show the reply target")
+	}
+	if err := tt.Click("Cancel"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := tt.Find("Write a comment…"); !ok || a.comments.draft != "My draft" {
+		t.Fatal("cancel did not restore the draft")
+	}
+	if err := tt.Click("Reply"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Type(" Thanks! ")
+	tt.Key(0, ui.KeyEnter)
+	if got := wait(t, src.sent, "track reply"); got != ([3]string{"2", "9", "Thanks!"}) {
+		t.Fatalf("posted %+v", got)
+	}
+	until(t, ch, func() bool { return len(a.comments.list) == 2 })
+	if a.comments.draft != "My draft" || a.comments.replyID != "" {
+		t.Fatal("posting a reply did not restore the draft")
+	}
+}
+
+type testTrackReplier struct {
+	music.Source
+	sent chan [3]string
+}
+
+func (s *testTrackReplier) Can(what string) bool {
+	return what == "replyComment" || s.Source.Can(what)
+}
+
+func (s *testTrackReplier) ReplyComment(trackID, commentID, text string) (*music.Comment, error) {
+	s.sent <- [3]string{trackID, commentID, text}
+	return &music.Comment{ID: "10", Text: text}, nil
+}

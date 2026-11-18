@@ -731,6 +731,9 @@ func TestReplyToAlbumComment(t *testing.T) {
 	d := a.albums["8"]
 	d.album.HasComments = true
 	d.comments = []music.Comment{{ID: "17", Author: "Listener", Text: "A comment"}}
+	for i := range 20 {
+		d.comments = append(d.comments, music.Comment{ID: fmt.Sprint(100 + i), Text: "Another album comment"})
+	}
 	d.commentsPaged.loaded = true
 	a.open(route{page: pageAlbum, id: "8"})
 	tt := ui.NewTester(a.view, 1200, 800)
@@ -738,8 +741,27 @@ func TestReplyToAlbumComment(t *testing.T) {
 	if err := tt.Click("Comments"); err != nil {
 		t.Fatal(err)
 	}
+	composer, ok := tt.Find("Write a comment…")
+	if !ok {
+		t.Fatal("missing composer")
+	}
+	tt.Scroll(650, 555, 0, 900)
+	tt.Advance(time.Second)
+	tt.Frame()
+	if moved, ok := tt.Find("Write a comment…"); !ok || moved.Y != composer.Y || a.pageScroll.Y < 100 {
+		t.Fatalf("composer moved with the list: %v, %v", moved, a.pageScroll.Y)
+	}
+	tt.Scroll(650, 555, 0, -2000)
+	tt.Advance(time.Second)
+	tt.Frame()
 	if err := tt.Click("Reply"); err != nil {
 		t.Fatal(err)
+	}
+	if _, ok := tt.Find("Replying to Listener"); !ok {
+		t.Fatal("reply target is not shown in the composer")
+	}
+	if _, ok := tt.Find("Write a comment…"); ok {
+		t.Fatal("a second composer is visible")
 	}
 	if err := tt.Click("Write a reply…"); err != nil {
 		t.Fatal(err)

@@ -101,6 +101,7 @@ Export a function for each thing the plugin does. Each takes one object of param
 | `postAlbumComment` | `{id, text, replyTo}`; `replyTo` is empty for a new comment | `Comment` |
 | `likeComment` | `{trackId, commentId, on}` | |
 | `postComment` | `{trackId, text}` | `Comment` |
+| `replyComment` | `{trackId, commentId, text}` | `Comment` |
 | `lyrics` | `{id}` | `{lrc, translation}`, or `{lines}` with timed `words` |
 | `stream` | `{id, quality}` | `{url, type, headers, size, gain, peak}`, where `type` is `mp3`, `flac`, `ogg`, `wav`, `m4a` (ALAC, FLAC or AAC-LC, whole or in fragments as a DASH stream serves it) or `aac` (AAC-LC in ADTS) |
 | `remotePlay` | `{ids, start, position}` | |

@@ -189,6 +189,11 @@ type AlbumCommentWriter interface {
 	PostAlbumComment(id, text, replyTo string) (*Comment, error)
 }
 
+// TrackCommentReplier is an optional capability of sources with track comments.
+type TrackCommentReplier interface {
+	ReplyComment(trackID, commentID, text string) (*Comment, error)
+}
+
 // CommentPage is a page of a track's or album's comments.
 type CommentPage struct {
 	Comments []Comment `json:"comments,omitempty"`
