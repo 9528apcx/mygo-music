@@ -3,7 +3,6 @@ package app
 import (
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/egoist/mygo/ui"
 
@@ -69,23 +68,54 @@ func (a *app) albumPage(c *ui.Context) {
 	a.trackRows(c, d.album.Tracks, false, func(c *ui.Context) {
 		a.albumHeader(c, d)
 		if text := strings.TrimSpace(d.album.Description); text != "" {
-			ui.Column(c.Key("description")).Gap(8).Padding(0, 0, 18, 0).Children(func() {
-				const previewThreshold = 160
-				chars := []rune(text)
-				if len(chars) > previewThreshold {
-					label := T("Show More")
-					if d.descriptionOpen {
-						label = T("Show Less")
-					}
-					if ui.Button(c.Key("toggle"), label).AlignSelf(ui.Start).Clicked() {
-						d.descriptionOpen = !d.descriptionOpen
-					}
-					if !d.descriptionOpen {
-						text = strings.TrimRightFunc(string(chars[:len(chars)/5]), unicode.IsSpace) + "…"
-					}
-				}
-				ui.Text(c, text).FontSize(14).LineHeight(1.5).TextColor(a.pal.muted)
-			})
+			a.albumDescription(c.Key("description"), d, text)
+		}
+	})
+}
+
+func (a *app) albumDescription(c *ui.Context, d *albumData, text string) {
+	const font = 14
+	width, _ := c.Size()
+	// Match the track list's content width, including its sidebar and insets.
+	width = max(1, width-sidebarWidth-2*(pagePad-12))
+	_, full := c.MeasureText(width, ui.Span{Text: text, Size: font})
+	_, preview := c.MeasureText(width, ui.Span{Text: "M\nM\nM\nM", Size: font})
+	_, fiveLines := c.MeasureText(width, ui.Span{Text: "M\nM\nM\nM\nM", Size: font})
+	section := ui.Column(c).Padding(0, 0, 18, 0)
+	section.Children(func() {
+		// A fifth line alone does not justify hiding content behind a button.
+		if full <= fiveLines+0.5 {
+			ui.Text(c, text).Width(width).FontSize(font).TextColor(a.pal.muted)
+			return
+		}
+
+		top, _ := a.insets(c)
+		// Keep the description below the toolbar when it is scrolled to.
+		anchor := ui.Box(c.Key("anchor")).Height(top+pageGap).Margin(-top-pageGap, 0, 0, 0)
+		motion := ui.Animation{Duration: 300 * time.Millisecond, Ease: ui.EaseInOut}
+		height, label, icon := preview, T("Show More"), iconDown
+		if d.descriptionOpen {
+			height, label, icon = full, T("Show Less"), iconUp
+		}
+		body := ui.Column(c.Key("body")).ClipY()
+		body.Height(body.AnimateTo("description-height", height, motion))
+		if !d.descriptionOpen {
+			opaque := ui.RGB(0, 0, 0)
+			body.MaskLinearGradient(ui.LinearGradient{Angle: 180, Stops: []ui.GradientStop{
+				{Color: opaque, At: 0},
+				{Color: opaque, At: 0.73},
+				{Color: ui.Transparent, At: 1},
+			}})
+		}
+		body.Children(func() {
+			ui.Text(c, text).Width(width).FontSize(font).TextColor(a.pal.muted).Shrink(0)
+		})
+		button := pillButton(c.Key("toggle"), icon, label, a.pal.hover.Over(a.pal.bg), a.pal.text)
+		if button.AlignSelf(ui.Center).Margin(8, 0, 0, 0).MinHeight(40).Clicked() {
+			if d.descriptionOpen && section.Bounds().Y < top {
+				anchor.ScrollIntoView(ui.ScrollIntoViewOptions{Block: ui.ScrollStart, Animation: &motion})
+			}
+			d.descriptionOpen = !d.descriptionOpen
 		}
 	})
 }

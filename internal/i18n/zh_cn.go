@@ -158,7 +158,7 @@ var zhCN = map[string]string{
 	"Like/Unlike":                                                                     "喜欢/取消喜欢",
 	"Liked Songs":                                                                     "我喜欢的音乐",
 	"Couldn't load comments":                                                          "无法加载评论",
-	"Show More":                                                                       "展开更多",
+	"Show More":                                                                       "展开全部",
 	"Show Less":                                                                       "收起",
 	"Reply":                                                                           "回复",
 	"Write a reply…":                                                                  "写回复…",

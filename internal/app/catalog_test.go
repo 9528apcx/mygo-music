@@ -705,41 +705,48 @@ func (s *testAlbumCommentSource) AlbumComments(id string, offset int) (*music.Co
 	return &music.CommentPage{Comments: []music.Comment{{ID: fmt.Sprint(offset), Text: "A comment"}}, More: offset == 0}, nil
 }
 
-// Long introductions start with a Unicode-safe preview, and short ones stay visible.
+// The toggle depends on wrapped lines, and expanding must reveal more than one line.
 func TestAlbumDescriptionDisclosure(t *testing.T) {
 	a := catalogApp()
 	d := a.albums["8"]
-	short := "The studio sessions behind this album."
-	d.album.Description = short
 	a.open(route{page: pageAlbum, id: "8"})
 	tt := ui.NewTester(a.view, 880, 800)
-	tt.Frame()
-	if _, ok := tt.Find(short); !ok {
-		t.Fatal("short introduction should show in full")
-	}
-	if _, ok := tt.Find("Show More"); ok {
-		t.Fatal("short introduction should not have a toggle")
+	for _, n := range []int{1, 4, 5} {
+		text := strings.TrimSpace(strings.Repeat("专辑简介\n", n))
+		d.album.Description = text
+		tt.Frame()
+		if _, ok := tt.Find("Show More"); ok {
+			t.Fatalf("%d lines should not have a toggle", n)
+		}
+		if _, ok := tt.Find(text); !ok {
+			t.Fatalf("%d lines should be visible", n)
+		}
 	}
 
-	prefix := strings.Repeat("专辑简介", 10)
-	full := prefix + strings.Repeat("更多内容", 40)
-	preview := prefix + "…"
-	d.album.Description = full
+	d.album.Description = strings.TrimSpace(strings.Repeat("专辑简介\n", 6))
 	tt.Frame()
-	if _, ok := tt.Find(preview); !ok {
-		t.Fatal("missing 20% preview")
-	}
 	if err := tt.Click("Show More"); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := tt.Find(full); !ok {
-		t.Fatal("description did not expand")
-	}
+	tt.Advance(time.Second)
 	if err := tt.Click("Show Less"); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := tt.Find(preview); !ok {
+	tt.Advance(time.Second)
+	if _, ok := tt.Find("Show More"); !ok {
 		t.Fatal("description did not return to the preview")
+	}
+
+	d.album.Description = strings.Repeat("专辑简介", 53)
+	tt.SetSize(880, 800)
+	tt.Frame()
+	if _, ok := tt.Find("Show More"); !ok {
+		t.Fatal("description should wrap and collapse in the narrow window")
+	}
+	tt.SetSize(1200, 800)
+	tt.Frame()
+	if _, ok := tt.Find("Show More"); ok {
+		t.Fatal("description should fit without a toggle in the wide window")
 	}
 }
 
@@ -781,4 +788,43 @@ func (s *testAlbumCommentSource) Can(what string) bool {
 func (s *testAlbumCommentSource) PostAlbumComment(id, text, replyTo string) (*music.Comment, error) {
 	s.sent <- id + "/" + replyTo + "/" + text
 	return &music.Comment{ID: "18", Text: text}, nil
+}
+
+// Collapsing after scrolling into a long introduction returns to its start.
+func TestAlbumDescriptionScrollAnchor(t *testing.T) {
+	a := catalogApp()
+	d := a.albums["8"]
+	d.album.Tracks = slices.Repeat(d.album.Tracks, 5)
+	d.album.Description = strings.TrimSpace(strings.Repeat("Description line with enough text to see the fade.\n", 36))
+	a.open(route{page: pageAlbum, id: "8"})
+	tt := ui.NewTester(a.view, 880, 700)
+	tt.Frame()
+	preview, ok := tt.Find("Show More")
+	if !ok {
+		t.Fatal("missing preview toggle")
+	}
+	if dir := os.Getenv("MM_FRAMES"); dir != "" {
+		saveFrame(t, dir, "album-description-preview.png", tt.Image())
+	}
+
+	if err := tt.Click("Show More"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(time.Second)
+	tt.Scroll(580, 500, 0, 440)
+	tt.Advance(time.Second)
+	tt.Frame()
+	expanded, ok := tt.Find("Show Less")
+	if !ok || expanded.Y < 46 || expanded.Y+expanded.H > 610 {
+		t.Fatalf("expected visible collapse button after scrolling: %+v", expanded)
+	}
+	if err := tt.Click("Show Less"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(time.Second)
+	tt.Frame()
+	collapsed, ok := tt.Find("Show More")
+	if !ok || collapsed.Y < 100 || collapsed.Y >= preview.Y-100 {
+		t.Fatalf("did not return to the description top: %+v (original %+v)", collapsed, preview)
+	}
 }
