@@ -7,6 +7,7 @@ import (
 	"image/draw"
 	"os"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -704,27 +705,41 @@ func (s *testAlbumCommentSource) AlbumComments(id string, offset int) (*music.Co
 	return &music.CommentPage{Comments: []music.Comment{{ID: fmt.Sprint(offset), Text: "A comment"}}, More: offset == 0}, nil
 }
 
-// The album's introduction can be opened and closed without leaving the track list.
+// Long introductions start with a Unicode-safe preview, and short ones stay visible.
 func TestAlbumDescriptionDisclosure(t *testing.T) {
 	a := catalogApp()
-	a.albums["8"].album.Description = "The studio sessions behind this album."
+	d := a.albums["8"]
+	short := "The studio sessions behind this album."
+	d.album.Description = short
 	a.open(route{page: pageAlbum, id: "8"})
-	tt := ui.NewTester(a.view, 1200, 800)
+	tt := ui.NewTester(a.view, 880, 800)
 	tt.Frame()
-	if _, ok := tt.Find("The studio sessions behind this album."); ok {
-		t.Fatal("description starts expanded")
+	if _, ok := tt.Find(short); !ok {
+		t.Fatal("short introduction should show in full")
 	}
-	if err := tt.Click("Show Album Description"); err != nil {
+	if _, ok := tt.Find("Show More"); ok {
+		t.Fatal("short introduction should not have a toggle")
+	}
+
+	prefix := strings.Repeat("专辑简介", 10)
+	full := prefix + strings.Repeat("更多内容", 40)
+	preview := prefix + "…"
+	d.album.Description = full
+	tt.Frame()
+	if _, ok := tt.Find(preview); !ok {
+		t.Fatal("missing 20% preview")
+	}
+	if err := tt.Click("Show More"); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := tt.Find("The studio sessions behind this album."); !ok {
+	if _, ok := tt.Find(full); !ok {
 		t.Fatal("description did not expand")
 	}
-	if err := tt.Click("Hide Album Description"); err != nil {
+	if err := tt.Click("Show Less"); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := tt.Find("The studio sessions behind this album."); ok {
-		t.Fatal("description did not collapse")
+	if _, ok := tt.Find(preview); !ok {
+		t.Fatal("description did not return to the preview")
 	}
 }
 

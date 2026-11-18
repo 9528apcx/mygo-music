@@ -3,6 +3,7 @@ package app
 import (
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/egoist/mygo/ui"
 
@@ -69,16 +70,21 @@ func (a *app) albumPage(c *ui.Context) {
 		a.albumHeader(c, d)
 		if text := strings.TrimSpace(d.album.Description); text != "" {
 			ui.Column(c.Key("description")).Gap(8).Padding(0, 0, 18, 0).Children(func() {
-				label := T("Show Album Description")
-				if d.descriptionOpen {
-					label = T("Hide Album Description")
+				const previewThreshold = 160
+				chars := []rune(text)
+				if len(chars) > previewThreshold {
+					label := T("Show More")
+					if d.descriptionOpen {
+						label = T("Show Less")
+					}
+					if ui.Button(c.Key("toggle"), label).AlignSelf(ui.Start).Clicked() {
+						d.descriptionOpen = !d.descriptionOpen
+					}
+					if !d.descriptionOpen {
+						text = strings.TrimRightFunc(string(chars[:len(chars)/5]), unicode.IsSpace) + "…"
+					}
 				}
-				if ui.Button(c.Key("toggle"), label).AlignSelf(ui.Start).Clicked() {
-					d.descriptionOpen = !d.descriptionOpen
-				}
-				if d.descriptionOpen {
-					ui.Text(c, text).FontSize(14).LineHeight(1.5).TextColor(a.pal.muted)
-				}
+				ui.Text(c, text).FontSize(14).LineHeight(1.5).TextColor(a.pal.muted)
 			})
 		}
 	})
