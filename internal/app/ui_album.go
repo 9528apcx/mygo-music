@@ -230,11 +230,11 @@ func (a *app) albumCommentList(c *ui.Context, lib *library, d *albumData, id str
 		a.empty(c, T("Loading…"))
 	case pg.err != "":
 		ui.Text(c, pg.err).TextColor(a.pal.muted)
-		if ui.Button(c.Key("retry"), T("Retry")).Disabled(d.posting).Clicked() {
+		if pillButton(c.Key("retry"), nil, T("Retry"), ui.Transparent, a.pal.muted).Disabled(d.posting).Clicked() {
 			next()
 		}
 	case pg.more:
-		if ui.Button(c.Key("more"), T("Load More")).Disabled(d.posting).Clicked() {
+		if pillButton(c.Key("more"), nil, T("Load More"), ui.Transparent, a.pal.muted).Disabled(d.posting).Clicked() {
 			next()
 		}
 	case pg.loaded && len(d.comments) == 0:
@@ -244,7 +244,7 @@ func (a *app) albumCommentList(c *ui.Context, lib *library, d *albumData, id str
 
 func (a *app) albumCommentRow(c *ui.Context, lib *library, d *albumData, id string, cm music.Comment, writer music.AlbumCommentWriter, canPost bool) {
 	p := a.pal
-	ui.Row(c).Gap(12).Padding(12, 0).AlignItems(ui.Start).Children(func() {
+	ui.Row(c).Gap(14).Padding(16, 0, 10, 0).BorderWidth(0, 0, 1, 0).BorderColor(p.hairline).AlignItems(ui.Start).Children(func() {
 		a.avatar(c.Key("avatar"), cm.AvatarURL, 36, p.hover.Over(p.bg))
 		ui.Column(c.Key("body")).Grow(1).Shrink(1).MinWidth(0).Gap(6).Children(func() {
 			ui.Text(c, cm.Author).FontSize(14).FontWeight(600).TextColor(p.text)
@@ -254,7 +254,7 @@ func (a *app) albumCommentRow(c *ui.Context, lib *library, d *albumData, id stri
 					ui.Text(c, i18n.Date(time.UnixMilli(cm.Time).Local())).FontSize(12).TextColor(p.muted)
 				}
 				ui.Spacer(c)
-				if canPost && cm.ID != "" && d.replyTo == "" && ui.Button(c.Key("reply"), T("Reply")).Disabled(d.posting).Clicked() {
+				if canPost && cm.ID != "" && d.replyTo == "" && pillButton(c.Key("reply"), nil, T("Reply"), ui.Transparent, a.pal.muted).Disabled(d.posting).Clicked() {
 					if lib.signedOut() {
 						a.promptSignIn(lib)
 					} else {
@@ -274,12 +274,12 @@ func (a *app) albumCommentBox(c *ui.Context, lib *library, d *albumData, writer 
 	if replyTo != "" {
 		draft, placeholder = &d.replyDraft, T("Write a reply…")
 	}
-	ui.Row(c).Gap(8).AlignItems(ui.Center).Padding(8, 0).Children(func() {
-		in := ui.TextInput(c.Key("draft"), draft).Placeholder(placeholder).Label(placeholder).Grow(1).Shrink(1).MinWidth(0).Disabled(d.posting)
+	ui.Row(c).Gap(8).AlignItems(ui.Center).Padding(8, 0, 12, 0).Children(func() {
+		in := ui.TextInput(c.Key("draft"), draft).Placeholder(placeholder).Label(placeholder).Grow(1).Shrink(1).MinWidth(0).Height(36).Radius(10).BorderWidth(0).Background(a.pal.hover.Over(a.pal.bg)).Disabled(d.posting)
 		text := strings.TrimSpace(*draft)
 		busy := d.posting || d.commentsPaged.loading
-		send := ui.Button(c.Key("send"), T("Post")).Disabled(text == "" || busy)
-		if replyTo != "" && ui.Button(c.Key("cancel"), T("Cancel")).Disabled(d.posting).Clicked() {
+		send := pillButton(c.Key("send"), nil, T("Post"), a.pal.hover.Over(a.pal.bg), a.pal.text).Disabled(text == "" || busy)
+		if replyTo != "" && pillButton(c.Key("cancel"), nil, T("Cancel"), ui.Transparent, a.pal.muted).Disabled(d.posting).Clicked() {
 			d.replyTo, d.replyDraft = "", ""
 			return
 		}
