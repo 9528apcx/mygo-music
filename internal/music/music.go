@@ -199,6 +199,11 @@ type TrackCommentReplier interface {
 	ReplyComment(trackID, commentID, text string) (*Comment, error)
 }
 
+// NoteSharer publishes a song or album to the source's music notes.
+type NoteSharer interface {
+	ShareNote(kind, id, text string) error
+}
+
 // CommentPage is a page of a track's or album's comments.
 type CommentPage struct {
 	Comments []Comment `json:"comments,omitempty"`

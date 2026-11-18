@@ -91,6 +91,7 @@ type app struct {
 	// to open over: the settings window's, if asked there. Set on the main
 	// thread, read on the plugin's.
 	signInOver     *atomic.Pointer[mygo.Window]
+	note           noteDialog
 	naming         nameDialog                   // the name of a playlist asked for
 	deleting       deleteDialog                 // whether to delete a playlist, asked
 	toast          string                       // a message to show once

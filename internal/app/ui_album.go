@@ -197,6 +197,11 @@ func (a *app) albumHeader(c *ui.Context, d *albumData) {
 						a.toggleAlbumSaved(a.library, d)
 					}
 				}
+				if writer := noteWriter(a.library); writer != nil && al.ID != "" && !strings.HasPrefix(al.ID, "show:") {
+					if iconButton(c.Key("share-note"), iconShare, 18, p.muted, T("Share to Music Notes")).Clicked() {
+						a.openMusicNote(a.library, writer, "album", al.ID, al.Name)
+					}
+				}
 			})
 		})
 	})

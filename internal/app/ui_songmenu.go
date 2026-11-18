@@ -38,6 +38,12 @@ func (a *app) songItems(tr *music.Track, pid string) func(m *ui.Menu) {
 				copyText(tr.URL)
 			}
 		}
+		if writer := noteWriter(lib); writer != nil && tr.ID != "" && tr.ShowID == "" {
+			m.Separator()
+			if m.Item(T("Share to Music Notes")).Chosen() {
+				a.openMusicNote(lib, writer, "song", tr.ID, tr.Name)
+			}
+		}
 		if a.canDownload(tr) {
 			m.Separator()
 			if m.Item(T("Download…")).Chosen() {

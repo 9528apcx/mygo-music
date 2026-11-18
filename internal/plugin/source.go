@@ -292,6 +292,10 @@ func (p *Plugin) ReplyComment(trackID, commentID, text string) (*music.Comment, 
 	return &cm, nil
 }
 
+func (p *Plugin) ShareNote(kind, id, text string) error {
+	return p.call("shareNote", map[string]string{"kind": kind, "id": id, "text": text}, nil)
+}
+
 // Played tells the plugin a track plays, if it has "played": for its recent
 // list, or whatever else it wants to know that for.
 func (p *Plugin) Played(t music.Track) {

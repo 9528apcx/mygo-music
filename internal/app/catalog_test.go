@@ -892,3 +892,66 @@ func (s *testAlbumLiker) LikeAlbumComment(id, commentID string, on bool) error {
 	}
 	return nil
 }
+
+// Opening the share dialog only prepares a note. Publish sends the selected album and its draft.
+func TestAlbumShareNote(t *testing.T) {
+	a := catalogApp()
+	ch := posts(a)
+	src := &testNoteSharer{Source: a.library.src, sent: make(chan [3]string, 1)}
+	a.library.src = src
+	a.account = &music.Account{ID: "7"}
+	a.open(route{page: pageAlbum, id: "8"})
+	tt := ui.NewTester(a.view, 880, 700)
+	tt.Frame()
+	if err := tt.Click("Share to Music Notes"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("Cancel"); err != nil {
+		t.Fatal(err)
+	}
+	if a.note.open || len(src.sent) != 0 {
+		t.Fatal("cancel should close the draft without publishing")
+	}
+	if err := tt.Click("Share to Music Notes"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("Write a note…"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Type("My favorite album")
+	if err := tt.Click("Publish Note"); err != nil {
+		t.Fatal(err)
+	}
+	if got := wait(t, src.sent, "published note"); got != ([3]string{"album", "8", "My favorite album"}) {
+		t.Fatalf("shared %+v", got)
+	}
+	until(t, ch, func() bool { return a.toast == "Note published" })
+	tt.Frame()
+	if err := tt.RightClick("詩超絆"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.ChooseMenuItem("Share to Music Notes"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("Publish Note"); err != nil {
+		t.Fatal(err)
+	}
+	if got := wait(t, src.sent, "published song note"); got != ([3]string{"song", "1", ""}) {
+		t.Fatalf("shared %+v", got)
+	}
+	until(t, ch, func() bool { return !a.note.busy })
+}
+
+type testNoteSharer struct {
+	music.Source
+	sent chan [3]string
+}
+
+func (s *testNoteSharer) Can(what string) bool {
+	return what == "shareNote" || s.Source.Can(what)
+}
+
+func (s *testNoteSharer) ShareNote(kind, id, text string) error {
+	s.sent <- [3]string{kind, id, text}
+	return nil
+}
