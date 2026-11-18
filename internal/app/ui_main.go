@@ -395,6 +395,8 @@ func (a *app) content(c *ui.Context) {
 		a.artistPage(c)
 	case pageAlbum:
 		a.albumPage(c)
+	case pageAlbumComments:
+		a.albumCommentsPage(c)
 	case pageShow:
 		a.showPage(c)
 	case pageShows:

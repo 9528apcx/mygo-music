@@ -661,3 +661,44 @@ func TestCatalogFrameBudget(t *testing.T) {
 		}
 	}
 }
+
+// Opening an album's comments must page that album rather than a song.
+func TestAlbumComments(t *testing.T) {
+	a := catalogApp()
+	ch := posts(a)
+	source := &testAlbumCommentSource{Source: a.library.src, offsets: make(chan int, 2)}
+	a.library.src = source
+	d := a.albums["8"]
+	d.album.HasComments = true
+	a.open(route{page: pageAlbum, id: "8"})
+	tt := ui.NewTester(a.view, 1200, 800)
+	tt.Frame()
+	if err := tt.Click("Comments"); err != nil {
+		t.Fatal(err)
+	}
+	until(t, ch, func() bool { return len(d.comments) == 1 })
+	if offset := wait(t, source.offsets, "first comment page"); offset != 0 {
+		t.Fatalf("first offset = %d", offset)
+	}
+	tt.Frame()
+	if err := tt.Click("Load More"); err != nil {
+		t.Fatal(err)
+	}
+	until(t, ch, func() bool { return len(d.comments) == 2 })
+	if offset := wait(t, source.offsets, "next comment page"); offset != 1 || len(d.comments) != 2 || d.commentsPaged.more {
+		t.Fatalf("next offset = %d, comments = %v, more = %v", offset, d.comments, d.commentsPaged.more)
+	}
+}
+
+type testAlbumCommentSource struct {
+	music.Source
+	offsets chan int
+}
+
+func (s *testAlbumCommentSource) AlbumComments(id string, offset int) (*music.CommentPage, error) {
+	if id != "8" {
+		return nil, fmt.Errorf("unexpected album ID: %s", id)
+	}
+	s.offsets <- offset
+	return &music.CommentPage{Comments: []music.Comment{{ID: fmt.Sprint(offset), Text: "A comment"}}, More: offset == 0}, nil
+}

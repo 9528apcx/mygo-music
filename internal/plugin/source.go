@@ -252,6 +252,14 @@ func (p *Plugin) Comments(trackID string, offset int) (*music.CommentPage, error
 	return &page, nil
 }
 
+func (p *Plugin) AlbumComments(id string, offset int) (*music.CommentPage, error) {
+	var page music.CommentPage
+	if err := p.call("albumComments", map[string]any{"id": id, "offset": offset}, &page); err != nil {
+		return nil, err
+	}
+	return &page, nil
+}
+
 func (p *Plugin) LikeComment(trackID, commentID string, on bool) error {
 	return p.call("likeComment", map[string]any{"trackId": trackID, "commentId": commentID, "on": on}, nil)
 }

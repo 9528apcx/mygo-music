@@ -81,7 +81,7 @@ Export a function for each thing the plugin does. Each takes one object of param
 | `liked` | `{offset}` | `{tracks, more}` |
 | `isLiked` | `{ids}` | `{id: bool}` |
 | `like`, `likeEpisode` | `{id, on}` | `like` likes a song, and `likeEpisode` an episode: without it, episodes show no heart |
-| `album` | `{id}` | `{album, tracks}` |
+| `album` | `{id}` | `{album, tracks, description?, hasComments?}`; set `hasComments` for albums that support comments |
 | `artist` | `{id}` | `{artist, tracks, albums}` |
 | `saveAlbum`, `followArtist`, `savePlaylist`, `subscribeShow` | `{id, on}` | |
 | `savedAlbums` | `{offset}` | `{albums, more}` |
@@ -97,6 +97,7 @@ Export a function for each thing the plugin does. Each takes one object of param
 | `stations` | | `[Station]` |
 | `stationNext` | `{id}` | `[Track]` |
 | `comments` | `{trackId, offset}` | `{comments, total, more}` |
+| `albumComments` | `{id, offset}` | `{comments, total, more}` |
 | `likeComment` | `{trackId, commentId, on}` | |
 | `postComment` | `{trackId, text}` | `Comment` |
 | `lyrics` | `{id}` | `{lrc, translation}`, or `{lines}` with timed `words` |

@@ -34,6 +34,7 @@ const (
 	pageSavedAlbums
 	pageBrowse
 	pageSection
+	pageAlbumComments
 )
 
 type route struct {

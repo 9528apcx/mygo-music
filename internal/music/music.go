@@ -83,8 +83,10 @@ type ArtistPage struct {
 
 // AlbumPage is what an album's page shows.
 type AlbumPage struct {
-	Album  Album   `json:"album"`
-	Tracks []Track `json:"tracks,omitempty"`
+	Description string  `json:"description,omitempty"`
+	HasComments bool    `json:"hasComments,omitempty"`
+	Album       Album   `json:"album"`
+	Tracks      []Track `json:"tracks,omitempty"`
 }
 
 // Account is who is signed in to a source.
@@ -176,7 +178,12 @@ type Comment struct {
 	Liked     bool   `json:"liked,omitempty"`
 }
 
-// CommentPage is a page of a track's comments.
+// AlbumCommentSource is implemented by sources that provide album comments.
+type AlbumCommentSource interface {
+	AlbumComments(id string, offset int) (*CommentPage, error)
+}
+
+// CommentPage is a page of a track's or album's comments.
 type CommentPage struct {
 	Comments []Comment `json:"comments,omitempty"`
 	Total    int       `json:"total,omitempty"` // of all pages, if the source knows

@@ -11,10 +11,12 @@ import (
 
 // albumData is what the app has of an album.
 type albumData struct {
-	album   *music.AlbumPage
-	loading bool
-	saving  bool
-	err     string
+	album         *music.AlbumPage
+	loading       bool
+	saving        bool
+	err           string
+	comments      []music.Comment
+	commentsPaged paged
 }
 
 func (a *app) loadAlbum(lib *library, id string) {
@@ -57,7 +59,12 @@ func (a *app) albumPage(c *ui.Context) {
 		a.trackSkeleton(c, s, false, func(c *ui.Context) { a.playlistHeaderSkeleton(c, s) })
 		return
 	}
-	a.trackRows(c, d.album.Tracks, false, func(c *ui.Context) { a.albumHeader(c, d) })
+	a.trackRows(c, d.album.Tracks, false, func(c *ui.Context) {
+		a.albumHeader(c, d)
+		if text := strings.TrimSpace(d.album.Description); text != "" {
+			ui.Text(c, text).FontSize(14).LineHeight(1.5).TextColor(a.pal.muted).Margin(0, 0, 18, 0)
+		}
+	})
 }
 
 func (a *app) albumHeader(c *ui.Context, d *albumData) {
@@ -94,6 +101,11 @@ func (a *app) albumHeader(c *ui.Context, d *albumData) {
 			})
 			ui.Row(c).Gap(10).Margin(10, 0, 0, 0).Children(func() {
 				a.playButtons(c, tracks)
+				if _, ok := a.library.src.(music.AlbumCommentSource); ok && d.album.HasComments {
+					if pillButton(c.Key("comments"), iconComment, T("Comments"), p.hover.Over(p.bg), p.text).Clicked() {
+						a.open(route{page: pageAlbumComments, id: a.route.id})
+					}
+				}
 				if a.can("saveAlbum") {
 					icon, label := iconPlus, TC("Save", "library")
 					if al.Saved {
@@ -105,6 +117,72 @@ func (a *app) albumHeader(c *ui.Context, d *albumData) {
 				}
 			})
 		})
+	})
+}
+
+func (a *app) albumCommentsPage(c *ui.Context) {
+	id, lib := a.route.id, a.library
+	d := lib.albums[id]
+	if d == nil {
+		a.loadAlbum(lib, id)
+		d = lib.albums[id]
+	}
+	if d.album == nil {
+		if d.loading {
+			a.centered(c, T("Loading…"), nil)
+		} else {
+			a.centered(c, d.err, func() { a.loadAlbum(lib, id) })
+		}
+		return
+	}
+	source, ok := lib.src.(music.AlbumCommentSource)
+	if !ok || !d.album.HasComments {
+		a.centered(c, T("No comments yet"), nil)
+		return
+	}
+	pg := &d.commentsPaged
+	next := func() {
+		pg.loading, pg.err = true, ""
+		offset := len(d.comments)
+		go func() {
+			page, err := answered(source.AlbumComments(id, offset))
+			a.post(func() {
+				pg.loading = false
+				if err != nil {
+					pg.err = a.problem(lib, err, T("Couldn't load comments"))
+					return
+				}
+				d.comments = append(d.comments, page.Comments...)
+				pg.loaded, pg.more = true, page.More && len(page.Comments) > 0
+			})
+		}()
+	}
+	if !pg.loaded && !pg.loading && pg.err == "" {
+		next()
+	}
+	a.scrollPage(c, func() {
+		a.heading(c, T("Comments"), d.album.Album.Name)
+		for i, cm := range d.comments {
+			ui.Column(c.Key(i)).Gap(5).Padding(12).Children(func() {
+				ui.Text(c, cm.Author).FontSize(13).FontWeight(600).TextColor(a.pal.muted)
+				ui.Text(c, cm.Text).FontSize(15).LineHeight(1.5)
+			})
+		}
+		switch {
+		case pg.loading:
+			a.empty(c, T("Loading…"))
+		case pg.err != "":
+			ui.Text(c, pg.err).TextColor(a.pal.muted)
+			if ui.Button(c.Key("retry"), T("Retry")).Clicked() {
+				next()
+			}
+		case pg.more:
+			if ui.Button(c.Key("more"), T("Load More")).Clicked() {
+				next()
+			}
+		case pg.loaded && len(d.comments) == 0:
+			a.empty(c, T("No comments yet"))
+		}
 	})
 }
 
