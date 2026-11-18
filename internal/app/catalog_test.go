@@ -670,10 +670,17 @@ func TestAlbumComments(t *testing.T) {
 	source := &testAlbumCommentSource{Source: a.library.src, offsets: make(chan int, 2)}
 	a.library.src = source
 	d := a.albums["8"]
-	d.album.HasComments = true
+	total := 392
+	d.album.HasComments, d.album.CommentCount = true, &total
 	a.open(route{page: pageAlbum, id: "8"})
 	tt := ui.NewTester(a.view, 1200, 800)
 	tt.Frame()
+	if _, ok := tt.Find("詩超絆"); !ok {
+		t.Fatal("album did not start on Songs")
+	}
+	if dir := os.Getenv("MM_FRAMES"); dir != "" {
+		saveFrame(t, dir, "album-tabs.png", tt.Image())
+	}
 	if err := tt.Click("Comments"); err != nil {
 		t.Fatal(err)
 	}
@@ -682,6 +689,15 @@ func TestAlbumComments(t *testing.T) {
 		t.Fatalf("first offset = %d", offset)
 	}
 	tt.Frame()
+	if _, ok := tt.Find("詩超絆"); ok {
+		t.Fatal("songs are still visible on the Comments tab")
+	}
+	if _, ok := tt.Find("迷跡波"); !ok {
+		t.Fatal("the album header should stay visible")
+	}
+	if _, ok := tt.Find("392"); !ok {
+		t.Fatal("comment total is missing from the tab")
+	}
 	if err := tt.Click("Load More"); err != nil {
 		t.Fatal(err)
 	}
@@ -702,7 +718,7 @@ func (s *testAlbumCommentSource) AlbumComments(id string, offset int) (*music.Co
 		return nil, fmt.Errorf("unexpected album ID: %s", id)
 	}
 	s.offsets <- offset
-	return &music.CommentPage{Comments: []music.Comment{{ID: fmt.Sprint(offset), Text: "A comment"}}, More: offset == 0}, nil
+	return &music.CommentPage{Comments: []music.Comment{{ID: fmt.Sprint(offset), Text: "A comment"}}, Total: 392, More: offset == 0}, nil
 }
 
 // The toggle depends on wrapped lines, and expanding must reveal more than one line.
@@ -715,6 +731,9 @@ func TestAlbumDescriptionDisclosure(t *testing.T) {
 		text := strings.TrimSpace(strings.Repeat("专辑简介\n", n))
 		d.album.Description = text
 		tt.Frame()
+		if err := tt.Click("Album Details"); err != nil {
+			t.Fatal(err)
+		}
 		if _, ok := tt.Find("Show More"); ok {
 			t.Fatalf("%d lines should not have a toggle", n)
 		}
@@ -761,9 +780,12 @@ func TestReplyToAlbumComment(t *testing.T) {
 	d.album.HasComments = true
 	d.comments = []music.Comment{{ID: "17", Author: "Listener", Text: "A comment"}}
 	d.commentsPaged.loaded = true
-	a.open(route{page: pageAlbumComments, id: "8"})
+	a.open(route{page: pageAlbum, id: "8"})
 	tt := ui.NewTester(a.view, 1200, 800)
 	tt.Frame()
+	if err := tt.Click("Comments"); err != nil {
+		t.Fatal(err)
+	}
 	if err := tt.Click("Reply"); err != nil {
 		t.Fatal(err)
 	}
@@ -794,11 +816,13 @@ func (s *testAlbumCommentSource) PostAlbumComment(id, text, replyTo string) (*mu
 func TestAlbumDescriptionScrollAnchor(t *testing.T) {
 	a := catalogApp()
 	d := a.albums["8"]
-	d.album.Tracks = slices.Repeat(d.album.Tracks, 5)
 	d.album.Description = strings.TrimSpace(strings.Repeat("Description line with enough text to see the fade.\n", 36))
 	a.open(route{page: pageAlbum, id: "8"})
 	tt := ui.NewTester(a.view, 880, 700)
 	tt.Frame()
+	if err := tt.Click("Album Details"); err != nil {
+		t.Fatal(err)
+	}
 	preview, ok := tt.Find("Show More")
 	if !ok {
 		t.Fatal("missing preview toggle")
@@ -824,7 +848,7 @@ func TestAlbumDescriptionScrollAnchor(t *testing.T) {
 	tt.Advance(time.Second)
 	tt.Frame()
 	collapsed, ok := tt.Find("Show More")
-	if !ok || collapsed.Y < 100 || collapsed.Y >= preview.Y-100 {
+	if !ok || collapsed.Y < 46 || collapsed.Y > preview.Y+1 {
 		t.Fatalf("did not return to the description top: %+v (original %+v)", collapsed, preview)
 	}
 }

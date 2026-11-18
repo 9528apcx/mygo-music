@@ -83,10 +83,11 @@ type ArtistPage struct {
 
 // AlbumPage is what an album's page shows.
 type AlbumPage struct {
-	Description string  `json:"description,omitempty"`
-	HasComments bool    `json:"hasComments,omitempty"`
-	Album       Album   `json:"album"`
-	Tracks      []Track `json:"tracks,omitempty"`
+	Description  string  `json:"description,omitempty"`
+	HasComments  bool    `json:"hasComments,omitempty"`
+	CommentCount *int    `json:"commentCount,omitempty"`
+	Album        Album   `json:"album"`
+	Tracks       []Track `json:"tracks,omitempty"`
 }
 
 // Account is who is signed in to a source.

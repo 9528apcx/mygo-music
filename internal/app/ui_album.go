@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strconv"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 
 // albumData is what the app has of an album.
 type albumData struct {
+	tab             int
 	album           *music.AlbumPage
 	loading         bool
 	saving          bool
@@ -24,6 +26,12 @@ type albumData struct {
 	replyTo         string
 	posting         bool
 }
+
+const (
+	albumSongs = iota
+	albumComments
+	albumDetails
+)
 
 func (a *app) loadAlbum(lib *library, id string) {
 	d := lib.albums[id]
@@ -65,10 +73,74 @@ func (a *app) albumPage(c *ui.Context) {
 		a.trackSkeleton(c, s, false, func(c *ui.Context) { a.playlistHeaderSkeleton(c, s) })
 		return
 	}
-	a.trackRows(c, d.album.Tracks, false, func(c *ui.Context) {
+	source, _ := lib.src.(music.AlbumCommentSource)
+	if !d.album.HasComments {
+		source = nil
+	}
+	header := func(c *ui.Context) {
 		a.albumHeader(c, d)
-		if text := strings.TrimSpace(d.album.Description); text != "" {
-			a.albumDescription(c.Key("description"), d, text)
+		a.albumTabs(c.Key("tabs"), d, source != nil)
+	}
+	switch d.tab {
+	case albumComments:
+		a.scrollPage(c, func() {
+			header(c)
+			a.albumCommentList(c.Key("comment-list"), lib, d, id, source)
+		})
+	case albumDetails:
+		a.scrollPage(c, func() {
+			header(c)
+			if text := strings.TrimSpace(d.album.Description); text != "" {
+				a.albumDescription(c.Key("description"), d, text)
+			} else {
+				a.empty(c, T("No album description"))
+			}
+		})
+	default:
+		a.trackRows(c, d.album.Tracks, false, header)
+	}
+}
+
+func (a *app) albumTabs(c *ui.Context, d *albumData, hasComments bool) {
+	p := a.pal
+	songs := len(d.album.Tracks)
+	tabs := []struct {
+		label string
+		total *int
+	}{
+		{T("Songs"), &songs}, {T("Comments"), d.album.CommentCount}, {T("Album Details"), nil},
+	}
+	ui.Row(c).Role(ui.RoleTabList).Gap(14).Padding(0, 0, 14, 0).Children(func() {
+		for tab, item := range tabs {
+			if tab == albumComments && !hasComments {
+				continue
+			}
+			selected := d.tab == tab
+			fg, weight := p.muted, 400
+			if selected {
+				fg, weight = p.text, 700
+			}
+			button := ui.ButtonBase(c.Key(tab)).Role(ui.RoleTab).Label(item.label).AccessSelected(selected).Column().Gap(5).Padding(5, 8, 0, 8).AlignItems(ui.Center)
+			if button.Hovered() {
+				fg = p.text
+			}
+			button.Children(func() {
+				ui.Row(c).Gap(4).AlignItems(ui.Start).Children(func() {
+					ui.Text(c, item.label).FontSize(15).FontWeight(weight).TextColor(fg)
+					if item.total != nil {
+						ui.Text(c, strconv.Itoa(*item.total)).FontSize(11).TextColor(fg)
+					}
+				})
+				line := ui.Box(c).Size(16, 2).Radius(1)
+				if selected {
+					line.Background(p.accent)
+				}
+			})
+			if button.Clicked() && !selected {
+				d.tab = tab
+				a.pageScroll.ScrollTo(0, 0, ui.Animation{})
+				a.trackList.ScrollTo(0, ui.Start)
+			}
 		}
 	})
 }
@@ -154,11 +226,6 @@ func (a *app) albumHeader(c *ui.Context, d *albumData) {
 			})
 			ui.Row(c).Gap(10).Margin(10, 0, 0, 0).Children(func() {
 				a.playButtons(c, tracks)
-				if _, ok := a.library.src.(music.AlbumCommentSource); ok && d.album.HasComments {
-					if pillButton(c.Key("comments"), iconComment, T("Comments"), p.hover.Over(p.bg), p.text).Clicked() {
-						a.open(route{page: pageAlbumComments, id: a.route.id})
-					}
-				}
 				if a.can("saveAlbum") {
 					icon, label := iconPlus, TC("Save", "library")
 					if al.Saved {
@@ -173,26 +240,7 @@ func (a *app) albumHeader(c *ui.Context, d *albumData) {
 	})
 }
 
-func (a *app) albumCommentsPage(c *ui.Context) {
-	id, lib := a.route.id, a.library
-	d := lib.albums[id]
-	if d == nil {
-		a.loadAlbum(lib, id)
-		d = lib.albums[id]
-	}
-	if d.album == nil {
-		if d.loading {
-			a.centered(c, T("Loading…"), nil)
-		} else {
-			a.centered(c, d.err, func() { a.loadAlbum(lib, id) })
-		}
-		return
-	}
-	source, ok := lib.src.(music.AlbumCommentSource)
-	if !ok || !d.album.HasComments {
-		a.centered(c, T("No comments yet"), nil)
-		return
-	}
+func (a *app) albumCommentList(c *ui.Context, lib *library, d *albumData, id string, source music.AlbumCommentSource) {
 	pg := &d.commentsPaged
 	next := func() {
 		pg.loading, pg.err = true, ""
@@ -206,6 +254,9 @@ func (a *app) albumCommentsPage(c *ui.Context) {
 					return
 				}
 				d.comments = append(d.comments, page.Comments...)
+				if page.Total > 0 || len(d.comments) == 0 {
+					d.album.CommentCount = &page.Total
+				}
 				pg.loaded, pg.more = true, page.More && len(page.Comments) > 0
 			})
 		}()
@@ -215,30 +266,27 @@ func (a *app) albumCommentsPage(c *ui.Context) {
 	}
 	writer, canPost := source.(music.AlbumCommentWriter)
 	canPost = canPost && lib.src.Can("postAlbumComment")
-	a.scrollPage(c, func() {
-		a.heading(c, T("Comments"), d.album.Album.Name)
-		if canPost && d.replyTo == "" {
-			a.albumCommentBox(c.Key("post"), lib, d, writer, id, "")
+	if canPost && d.replyTo == "" {
+		a.albumCommentBox(c.Key("post"), lib, d, writer, id, "")
+	}
+	for i, cm := range d.comments {
+		a.albumCommentRow(c.Key(i), lib, d, id, cm, writer, canPost)
+	}
+	switch {
+	case pg.loading:
+		a.empty(c, T("Loading…"))
+	case pg.err != "":
+		ui.Text(c, pg.err).TextColor(a.pal.muted)
+		if ui.Button(c.Key("retry"), T("Retry")).Disabled(d.posting).Clicked() {
+			next()
 		}
-		for i, cm := range d.comments {
-			a.albumCommentRow(c.Key(i), lib, d, id, cm, writer, canPost)
+	case pg.more:
+		if ui.Button(c.Key("more"), T("Load More")).Disabled(d.posting).Clicked() {
+			next()
 		}
-		switch {
-		case pg.loading:
-			a.empty(c, T("Loading…"))
-		case pg.err != "":
-			ui.Text(c, pg.err).TextColor(a.pal.muted)
-			if ui.Button(c.Key("retry"), T("Retry")).Disabled(d.posting).Clicked() {
-				next()
-			}
-		case pg.more:
-			if ui.Button(c.Key("more"), T("Load More")).Disabled(d.posting).Clicked() {
-				next()
-			}
-		case pg.loaded && len(d.comments) == 0:
-			a.empty(c, T("No comments yet"))
-		}
-	})
+	case pg.loaded && len(d.comments) == 0:
+		a.empty(c, T("No comments yet"))
+	}
 }
 
 func (a *app) albumCommentRow(c *ui.Context, lib *library, d *albumData, id string, cm music.Comment, writer music.AlbumCommentWriter, canPost bool) {
