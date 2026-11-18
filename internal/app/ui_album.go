@@ -177,6 +177,17 @@ func (a *app) albumHeader(c *ui.Context, d *albumData) {
 					}
 				}
 				meta := []string{i18n.Songs(len(tracks))}
+				var duration int64
+				for _, track := range tracks {
+					if track.Duration <= 0 {
+						duration = 0
+						break
+					}
+					duration += track.Duration
+				}
+				if duration > 0 {
+					meta = append(meta, clock(time.Duration(duration)*time.Millisecond))
+				}
 				if al.Released != "" {
 					meta = append([]string{al.Released}, meta...)
 				}
