@@ -254,7 +254,7 @@ func (a *app) albumCommentRow(c *ui.Context, lib *library, d *albumData, id stri
 					ui.Text(c, i18n.Date(time.UnixMilli(cm.Time).Local())).FontSize(12).TextColor(p.muted)
 				}
 				ui.Spacer(c)
-				if canPost && cm.ID != "" && d.replyTo == "" && pillButton(c.Key("reply"), nil, T("Reply"), ui.Transparent, a.pal.muted).Disabled(d.posting).Clicked() {
+				if canPost && cm.ID != "" && d.replyTo == "" && iconButton(c.Key("reply"), iconComment, 16, p.muted, T("Reply")).Disabled(d.posting).Clicked() {
 					if lib.signedOut() {
 						a.promptSignIn(lib)
 					} else {
