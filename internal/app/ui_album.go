@@ -2,6 +2,7 @@ package app
 
 import (
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 
@@ -11,12 +12,17 @@ import (
 
 // albumData is what the app has of an album.
 type albumData struct {
-	album         *music.AlbumPage
-	loading       bool
-	saving        bool
-	err           string
-	comments      []music.Comment
-	commentsPaged paged
+	album           *music.AlbumPage
+	loading         bool
+	saving          bool
+	err             string
+	comments        []music.Comment
+	commentsPaged   paged
+	descriptionOpen bool
+	commentDraft    string
+	replyDraft      string
+	replyTo         string
+	posting         bool
 }
 
 func (a *app) loadAlbum(lib *library, id string) {
@@ -62,7 +68,18 @@ func (a *app) albumPage(c *ui.Context) {
 	a.trackRows(c, d.album.Tracks, false, func(c *ui.Context) {
 		a.albumHeader(c, d)
 		if text := strings.TrimSpace(d.album.Description); text != "" {
-			ui.Text(c, text).FontSize(14).LineHeight(1.5).TextColor(a.pal.muted).Margin(0, 0, 18, 0)
+			ui.Column(c.Key("description")).Gap(8).Padding(0, 0, 18, 0).Children(func() {
+				label := T("Show Album Description")
+				if d.descriptionOpen {
+					label = T("Hide Album Description")
+				}
+				if ui.Button(c.Key("toggle"), label).AlignSelf(ui.Start).Clicked() {
+					d.descriptionOpen = !d.descriptionOpen
+				}
+				if d.descriptionOpen {
+					ui.Text(c, text).FontSize(14).LineHeight(1.5).TextColor(a.pal.muted)
+				}
+			})
 		}
 	})
 }
@@ -160,29 +177,97 @@ func (a *app) albumCommentsPage(c *ui.Context) {
 	if !pg.loaded && !pg.loading && pg.err == "" {
 		next()
 	}
+	writer, canPost := source.(music.AlbumCommentWriter)
+	canPost = canPost && lib.src.Can("postAlbumComment")
 	a.scrollPage(c, func() {
 		a.heading(c, T("Comments"), d.album.Album.Name)
+		if canPost && d.replyTo == "" {
+			a.albumCommentBox(c.Key("post"), lib, d, writer, id, "")
+		}
 		for i, cm := range d.comments {
-			ui.Column(c.Key(i)).Gap(5).Padding(12).Children(func() {
-				ui.Text(c, cm.Author).FontSize(13).FontWeight(600).TextColor(a.pal.muted)
-				ui.Text(c, cm.Text).FontSize(15).LineHeight(1.5)
-			})
+			a.albumCommentRow(c.Key(i), lib, d, id, cm, writer, canPost)
 		}
 		switch {
 		case pg.loading:
 			a.empty(c, T("Loading…"))
 		case pg.err != "":
 			ui.Text(c, pg.err).TextColor(a.pal.muted)
-			if ui.Button(c.Key("retry"), T("Retry")).Clicked() {
+			if ui.Button(c.Key("retry"), T("Retry")).Disabled(d.posting).Clicked() {
 				next()
 			}
 		case pg.more:
-			if ui.Button(c.Key("more"), T("Load More")).Clicked() {
+			if ui.Button(c.Key("more"), T("Load More")).Disabled(d.posting).Clicked() {
 				next()
 			}
 		case pg.loaded && len(d.comments) == 0:
 			a.empty(c, T("No comments yet"))
 		}
+	})
+}
+
+func (a *app) albumCommentRow(c *ui.Context, lib *library, d *albumData, id string, cm music.Comment, writer music.AlbumCommentWriter, canPost bool) {
+	p := a.pal
+	ui.Row(c).Gap(12).Padding(12, 0).AlignItems(ui.Start).Children(func() {
+		a.avatar(c.Key("avatar"), cm.AvatarURL, 36, p.hover.Over(p.bg))
+		ui.Column(c.Key("body")).Grow(1).Shrink(1).MinWidth(0).Gap(6).Children(func() {
+			ui.Text(c, cm.Author).FontSize(14).FontWeight(600).TextColor(p.text)
+			ui.Text(c, cm.Text).FontSize(15).LineHeight(1.5).TextColor(p.text)
+			ui.Row(c.Key("meta")).Gap(12).AlignItems(ui.Center).Children(func() {
+				if cm.AuthorID != "" {
+					ui.Text(c, "ID: "+cm.AuthorID).FontSize(12).TextColor(p.muted)
+				}
+				if cm.Time > 0 {
+					ui.Text(c, i18n.Date(time.UnixMilli(cm.Time).Local())).FontSize(12).TextColor(p.muted)
+				}
+				if canPost && cm.ID != "" && d.replyTo == "" && ui.Button(c.Key("reply"), T("Reply")).Disabled(d.posting).Clicked() {
+					if lib.signedOut() {
+						a.promptSignIn(lib)
+					} else {
+						d.replyTo = cm.ID
+					}
+				}
+			})
+			if canPost && cm.ID != "" && d.replyTo == cm.ID {
+				a.albumCommentBox(c.Key("reply-box"), lib, d, writer, id, cm.ID)
+			}
+		})
+	})
+}
+
+func (a *app) albumCommentBox(c *ui.Context, lib *library, d *albumData, writer music.AlbumCommentWriter, id, replyTo string) {
+	draft, placeholder := &d.commentDraft, T("Write a comment…")
+	if replyTo != "" {
+		draft, placeholder = &d.replyDraft, T("Write a reply…")
+	}
+	ui.Row(c).Gap(8).AlignItems(ui.Center).Padding(8, 0).Children(func() {
+		in := ui.TextInput(c.Key("draft"), draft).Placeholder(placeholder).Label(placeholder).Grow(1).Shrink(1).MinWidth(0).Disabled(d.posting)
+		text := strings.TrimSpace(*draft)
+		busy := d.posting || d.commentsPaged.loading
+		send := ui.Button(c.Key("send"), T("Post")).Disabled(text == "" || busy)
+		if replyTo != "" && ui.Button(c.Key("cancel"), T("Cancel")).Disabled(d.posting).Clicked() {
+			d.replyTo, d.replyDraft = "", ""
+			return
+		}
+		if !(send.Clicked() || in.Submitted()) || text == "" || busy {
+			return
+		}
+		if lib.signedOut() {
+			a.promptSignIn(lib)
+			return
+		}
+		d.posting = true
+		go func() {
+			_, err := writer.PostAlbumComment(id, text, replyTo)
+			a.post(func() {
+				d.posting = false
+				if err != nil {
+					a.actionFailed(lib, err, T("Couldn't post your comment. Try again later."))
+					return
+				}
+				*draft, d.replyTo = "", ""
+				d.comments, d.commentsPaged = nil, paged{}
+			})
+		}()
 	})
 }
 

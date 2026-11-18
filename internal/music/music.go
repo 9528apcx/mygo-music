@@ -169,6 +169,7 @@ type Station struct {
 
 // Comment is what a listener said of a track.
 type Comment struct {
+	AuthorID  string `json:"authorId,omitempty"`
 	ID        string `json:"id"`
 	Author    string `json:"author"`
 	AvatarURL string `json:"avatarUrl,omitempty"`
@@ -181,6 +182,10 @@ type Comment struct {
 // AlbumCommentSource is implemented by sources that provide album comments.
 type AlbumCommentSource interface {
 	AlbumComments(id string, offset int) (*CommentPage, error)
+}
+
+type AlbumCommentWriter interface {
+	PostAlbumComment(id, text, replyTo string) (*Comment, error)
 }
 
 // CommentPage is a page of a track's or album's comments.

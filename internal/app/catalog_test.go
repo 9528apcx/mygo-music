@@ -693,6 +693,7 @@ func TestAlbumComments(t *testing.T) {
 type testAlbumCommentSource struct {
 	music.Source
 	offsets chan int
+	sent    chan string
 }
 
 func (s *testAlbumCommentSource) AlbumComments(id string, offset int) (*music.CommentPage, error) {
@@ -701,4 +702,68 @@ func (s *testAlbumCommentSource) AlbumComments(id string, offset int) (*music.Co
 	}
 	s.offsets <- offset
 	return &music.CommentPage{Comments: []music.Comment{{ID: fmt.Sprint(offset), Text: "A comment"}}, More: offset == 0}, nil
+}
+
+// The album's introduction can be opened and closed without leaving the track list.
+func TestAlbumDescriptionDisclosure(t *testing.T) {
+	a := catalogApp()
+	a.albums["8"].album.Description = "The studio sessions behind this album."
+	a.open(route{page: pageAlbum, id: "8"})
+	tt := ui.NewTester(a.view, 1200, 800)
+	tt.Frame()
+	if _, ok := tt.Find("The studio sessions behind this album."); ok {
+		t.Fatal("description starts expanded")
+	}
+	if err := tt.Click("Show Album Description"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := tt.Find("The studio sessions behind this album."); !ok {
+		t.Fatal("description did not expand")
+	}
+	if err := tt.Click("Hide Album Description"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := tt.Find("The studio sessions behind this album."); ok {
+		t.Fatal("description did not collapse")
+	}
+}
+
+// A reply must address the selected comment and refresh the album after sending.
+func TestReplyToAlbumComment(t *testing.T) {
+	a := catalogApp()
+	ch := posts(a)
+	src := &testAlbumCommentSource{Source: a.library.src, offsets: make(chan int, 2), sent: make(chan string, 1)}
+	a.library.src = src
+	a.account = &music.Account{ID: "7"}
+	d := a.albums["8"]
+	d.album.HasComments = true
+	d.comments = []music.Comment{{ID: "17", Author: "Listener", Text: "A comment"}}
+	d.commentsPaged.loaded = true
+	a.open(route{page: pageAlbumComments, id: "8"})
+	tt := ui.NewTester(a.view, 1200, 800)
+	tt.Frame()
+	if err := tt.Click("Reply"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("Write a reply…"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Type(" Good point! ")
+	tt.Key(0, ui.KeyEnter)
+	if got := wait(t, src.sent, "album reply"); got != "8/17/Good point!" {
+		t.Errorf("posted %q", got)
+	}
+	until(t, ch, func() bool { return len(d.comments) == 0 })
+	if d.commentsPaged.loaded {
+		t.Fatal("comments were not reset after posting")
+	}
+}
+
+func (s *testAlbumCommentSource) Can(what string) bool {
+	return what == "postAlbumComment" || s.Source.Can(what)
+}
+
+func (s *testAlbumCommentSource) PostAlbumComment(id, text, replyTo string) (*music.Comment, error) {
+	s.sent <- id + "/" + replyTo + "/" + text
+	return &music.Comment{ID: "18", Text: text}, nil
 }
