@@ -13,18 +13,17 @@ import (
 
 // albumData is what the app has of an album.
 type albumData struct {
-	tab             int
-	album           *music.AlbumPage
-	loading         bool
-	saving          bool
-	err             string
-	comments        []music.Comment
-	commentsPaged   paged
-	descriptionOpen bool
-	commentDraft    string
-	replyDraft      string
-	replyTo         string
-	posting         bool
+	tab           int
+	album         *music.AlbumPage
+	loading       bool
+	saving        bool
+	err           string
+	comments      []music.Comment
+	commentsPaged paged
+	commentDraft  string
+	replyDraft    string
+	replyTo       string
+	posting       bool
 }
 
 const (
@@ -77,28 +76,29 @@ func (a *app) albumPage(c *ui.Context) {
 	if !d.album.HasComments {
 		source = nil
 	}
-	header := func(c *ui.Context) {
-		a.albumHeader(c, d)
-		a.albumTabs(c.Key("tabs"), d, source != nil)
-	}
-	switch d.tab {
-	case albumComments:
-		a.scrollPage(c, func() {
-			header(c)
-			a.albumCommentList(c.Key("comment-list"), lib, d, id, source)
+	top, bottom := a.insets(c)
+	ui.Column(c).Grow(1).MinHeight(0).Padding(top+pageGap, 0, 0, 0).Children(func() {
+		ui.Column(c.Key("album-header")).PaddingX(pagePad - 12).Children(func() {
+			a.albumHeader(c, d)
+			a.albumTabs(c.Key("tabs"), d, source != nil)
 		})
-	case albumDetails:
-		a.scrollPage(c, func() {
-			header(c)
-			if text := strings.TrimSpace(d.album.Description); text != "" {
-				a.albumDescription(c.Key("description"), d, text)
+		if d.tab == albumSongs {
+			a.trackRows(c, d.album.Tracks, false, nil)
+			return
+		}
+
+		// Only the active tab's body scrolls, so its navigation stays reachable.
+		ui.Scroll(c.Key(d.tab)).TrackScroll(&a.pageScroll).Grow(1).MinHeight(0).Padding(0, pagePad-12, bottom+32, pagePad-12).ScrollbarInsets(0, 0, bottom, 0).Children(func() {
+			defer a.endMark(c)
+			if d.tab == albumComments {
+				a.albumCommentList(c.Key("comment-list"), lib, d, id, source)
+			} else if text := strings.TrimSpace(d.album.Description); text != "" {
+				ui.Text(c.Key("description"), text).FontSize(14).LineHeight(1.5).TextColor(a.pal.muted)
 			} else {
 				a.empty(c, T("No album description"))
 			}
 		})
-	default:
-		a.trackRows(c, d.album.Tracks, false, header)
-	}
+	})
 }
 
 func (a *app) albumTabs(c *ui.Context, d *albumData, hasComments bool) {
@@ -141,53 +141,6 @@ func (a *app) albumTabs(c *ui.Context, d *albumData, hasComments bool) {
 				a.pageScroll.ScrollTo(0, 0, ui.Animation{})
 				a.trackList.ScrollTo(0, ui.Start)
 			}
-		}
-	})
-}
-
-func (a *app) albumDescription(c *ui.Context, d *albumData, text string) {
-	const font = 14
-	width, _ := c.Size()
-	// Match the track list's content width, including its sidebar and insets.
-	width = max(1, width-sidebarWidth-2*(pagePad-12))
-	_, full := c.MeasureText(width, ui.Span{Text: text, Size: font})
-	_, preview := c.MeasureText(width, ui.Span{Text: "M\nM\nM\nM", Size: font})
-	_, fiveLines := c.MeasureText(width, ui.Span{Text: "M\nM\nM\nM\nM", Size: font})
-	section := ui.Column(c).Padding(0, 0, 18, 0)
-	section.Children(func() {
-		// A fifth line alone does not justify hiding content behind a button.
-		if full <= fiveLines+0.5 {
-			ui.Text(c, text).Width(width).FontSize(font).TextColor(a.pal.muted)
-			return
-		}
-
-		top, _ := a.insets(c)
-		// Keep the description below the toolbar when it is scrolled to.
-		anchor := ui.Box(c.Key("anchor")).Height(top+pageGap).Margin(-top-pageGap, 0, 0, 0)
-		motion := ui.Animation{Duration: 300 * time.Millisecond, Ease: ui.EaseInOut}
-		height, label, icon := preview, T("Show More"), iconDown
-		if d.descriptionOpen {
-			height, label, icon = full, T("Show Less"), iconUp
-		}
-		body := ui.Column(c.Key("body")).ClipY()
-		body.Height(body.AnimateTo("description-height", height, motion))
-		if !d.descriptionOpen {
-			opaque := ui.RGB(0, 0, 0)
-			body.MaskLinearGradient(ui.LinearGradient{Angle: 180, Stops: []ui.GradientStop{
-				{Color: opaque, At: 0},
-				{Color: opaque, At: 0.73},
-				{Color: ui.Transparent, At: 1},
-			}})
-		}
-		body.Children(func() {
-			ui.Text(c, text).Width(width).FontSize(font).TextColor(a.pal.muted).Shrink(0)
-		})
-		button := pillButton(c.Key("toggle"), icon, label, a.pal.hover.Over(a.pal.bg), a.pal.text)
-		if button.AlignSelf(ui.Center).Margin(8, 0, 0, 0).MinHeight(40).Clicked() {
-			if d.descriptionOpen && section.Bounds().Y < top {
-				anchor.ScrollIntoView(ui.ScrollIntoViewOptions{Block: ui.ScrollStart, Animation: &motion})
-			}
-			d.descriptionOpen = !d.descriptionOpen
 		}
 	})
 }

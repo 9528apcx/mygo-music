@@ -721,54 +721,6 @@ func (s *testAlbumCommentSource) AlbumComments(id string, offset int) (*music.Co
 	return &music.CommentPage{Comments: []music.Comment{{ID: fmt.Sprint(offset), Text: "A comment"}}, Total: 392, More: offset == 0}, nil
 }
 
-// The toggle depends on wrapped lines, and expanding must reveal more than one line.
-func TestAlbumDescriptionDisclosure(t *testing.T) {
-	a := catalogApp()
-	d := a.albums["8"]
-	a.open(route{page: pageAlbum, id: "8"})
-	tt := ui.NewTester(a.view, 880, 800)
-	for _, n := range []int{1, 4, 5} {
-		text := strings.TrimSpace(strings.Repeat("专辑简介\n", n))
-		d.album.Description = text
-		tt.Frame()
-		if err := tt.Click("Album Details"); err != nil {
-			t.Fatal(err)
-		}
-		if _, ok := tt.Find("Show More"); ok {
-			t.Fatalf("%d lines should not have a toggle", n)
-		}
-		if _, ok := tt.Find(text); !ok {
-			t.Fatalf("%d lines should be visible", n)
-		}
-	}
-
-	d.album.Description = strings.TrimSpace(strings.Repeat("专辑简介\n", 6))
-	tt.Frame()
-	if err := tt.Click("Show More"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Advance(time.Second)
-	if err := tt.Click("Show Less"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Advance(time.Second)
-	if _, ok := tt.Find("Show More"); !ok {
-		t.Fatal("description did not return to the preview")
-	}
-
-	d.album.Description = strings.Repeat("专辑简介", 53)
-	tt.SetSize(880, 800)
-	tt.Frame()
-	if _, ok := tt.Find("Show More"); !ok {
-		t.Fatal("description should wrap and collapse in the narrow window")
-	}
-	tt.SetSize(1200, 800)
-	tt.Frame()
-	if _, ok := tt.Find("Show More"); ok {
-		t.Fatal("description should fit without a toggle in the wide window")
-	}
-}
-
 // A reply must address the selected comment and refresh the album after sending.
 func TestReplyToAlbumComment(t *testing.T) {
 	a := catalogApp()
@@ -812,43 +764,49 @@ func (s *testAlbumCommentSource) PostAlbumComment(id, text, replyTo string) (*mu
 	return &music.Comment{ID: "18", Text: text}, nil
 }
 
-// Collapsing after scrolling into a long introduction returns to its start.
-func TestAlbumDescriptionScrollAnchor(t *testing.T) {
+// Album tabs must stay usable even when the full introduction is scrolled.
+func TestAlbumTabsStayAvailableAfterScrollingDetails(t *testing.T) {
 	a := catalogApp()
 	d := a.albums["8"]
-	d.album.Description = strings.TrimSpace(strings.Repeat("Description line with enough text to see the fade.\n", 36))
+	d.album.HasComments = true
+	d.album.Description = strings.Repeat("A line of the album introduction.\n", 55)
+	d.comments = []music.Comment{{ID: "17", Text: "An album comment"}}
+	d.commentsPaged.loaded = true
+	a.library.src = &testAlbumCommentSource{Source: a.library.src}
 	a.open(route{page: pageAlbum, id: "8"})
-	tt := ui.NewTester(a.view, 880, 700)
+	tt := ui.NewTester(a.view, 880, 660)
 	tt.Frame()
 	if err := tt.Click("Album Details"); err != nil {
 		t.Fatal(err)
 	}
-	preview, ok := tt.Find("Show More")
-	if !ok {
-		t.Fatal("missing preview toggle")
+	if _, ok := tt.Find("Show More"); ok {
+		t.Fatal("description still has an expand button")
+	}
+	if _, ok := tt.Find(strings.TrimSpace(d.album.Description)); !ok {
+		t.Fatal("full description is not present")
+	}
+	tt.Scroll(650, 520, 0, 630)
+	tt.Advance(time.Second)
+	tt.Frame()
+	if a.pageScroll.Y < 200 {
+		t.Fatal("test did not scroll into the long description")
 	}
 	if dir := os.Getenv("MM_FRAMES"); dir != "" {
-		saveFrame(t, dir, "album-description-preview.png", tt.Image())
+		saveFrame(t, dir, "album-scrolled-details.png", tt.Image())
 	}
-
-	if err := tt.Click("Show More"); err != nil {
+	if err := tt.Click("Comments"); err != nil {
 		t.Fatal(err)
 	}
-	tt.Advance(time.Second)
-	tt.Scroll(580, 500, 0, 440)
-	tt.Advance(time.Second)
-	tt.Frame()
-	expanded, ok := tt.Find("Show Less")
-	if !ok || expanded.Y < 46 || expanded.Y+expanded.H > 610 {
-		t.Fatalf("expected visible collapse button after scrolling: %+v", expanded)
+	if d.tab != albumComments {
+		t.Fatal("did not switch from scrolled details to comments")
 	}
-	if err := tt.Click("Show Less"); err != nil {
+	if _, ok := tt.Find("An album comment"); !ok {
+		t.Fatal("comment tab did not show comments")
+	}
+	if err := tt.Click("Songs"); err != nil {
 		t.Fatal(err)
 	}
-	tt.Advance(time.Second)
-	tt.Frame()
-	collapsed, ok := tt.Find("Show More")
-	if !ok || collapsed.Y < 46 || collapsed.Y > preview.Y+1 {
-		t.Fatalf("did not return to the description top: %+v (original %+v)", collapsed, preview)
+	if d.tab != albumSongs {
+		t.Fatal("did not switch back to songs")
 	}
 }

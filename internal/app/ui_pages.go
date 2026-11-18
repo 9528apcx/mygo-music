@@ -442,10 +442,14 @@ func (a *app) trackRows(c *ui.Context, tracks []music.Track, covers bool, header
 	top, bottom := a.insets(c)
 	// Rows out of view are not built, their marks with them: a list
 	// scrolled away from its start or end has content under the bars.
-	a.underTop, a.underBottom = true, true
-	rows := len(tracks) + 1 + len(footer)
+	a.underTop, a.underBottom = header != nil, true
+	first, padTop := 1, top+pageGap
+	if header == nil {
+		first, padTop, top = 0, 0, 0
+	}
+	rows := len(tracks) + first + len(footer)
 	ui.List(c.Key(a.route), &a.trackList, rows, func(i int) {
-		if i == 0 {
+		if i < first {
 			ui.Column(c).Children(func() {
 				a.startMark(c)
 				header(c)
@@ -455,12 +459,12 @@ func (a *app) trackRows(c *ui.Context, tracks []music.Track, covers bool, header
 		if i == rows-1 {
 			defer a.endMark(c)
 		}
-		if i > len(tracks) {
-			footer[i-len(tracks)-1](c)
+		if i-first >= len(tracks) {
+			footer[i-first-len(tracks)](c)
 			return
 		}
-		a.trackRow(c, tracks, i-1, covers, pid)
-	}).Grow(1).Padding(top+pageGap, pagePad-12, bottom+32, pagePad-12).ScrollbarInsets(top, 0, bottom, 0)
+		a.trackRow(c, tracks, i-first, covers, pid)
+	}).Grow(1).Padding(padTop, pagePad-12, bottom+32, pagePad-12).ScrollbarInsets(top, 0, bottom, 0)
 }
 
 // sameTrack reports whether two tracks are one: IDs are their source's.
