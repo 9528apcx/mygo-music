@@ -1,7 +1,19 @@
 // The configuration of the app, which `mygo dev` and `mygo build` evaluate with
 // Bun, of the command running. The development app (`mygo dev`) opens links of a
 // scheme of its own, for the installed app to keep mygo-music:// links.
-export default ({ command }: { command: string }) => ({
+export default ({ command }: { command: string }) => process.env.MYGO_CUSTOM_VERSION ? ({
+  name: "MyGo Music Custom",
+  identifier: "local.mygo.music.custom",
+  slug: "mygo-music-custom",
+  version: process.env.MYGO_CUSTOM_VERSION,
+  out: "build",
+  updates: {
+    publicKey: "6JuVtoqzpJfChqS0NdHNdzZH0LxDMQ1mTjHJiTjgw/Y=",
+    github: "9528apcx/mygo-music",
+    tagPrefix: "custom-v",
+    changelog: "CHANGELOG.custom.md",
+  },
+}) : ({
   name: "MyGo Music",
   identifier: "dev.egoist.music",
   slug: "mygo-music",

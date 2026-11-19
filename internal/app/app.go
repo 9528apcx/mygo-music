@@ -160,10 +160,12 @@ type app struct {
 	sig                   playerSig
 	quitting              bool
 
-	settings    settings
-	settingsWin *mygo.Window
-	cacheUsed   int64 // the bytes the song cache takes, -1 until measured
-	updates     bool  // the update plugin is used (useUpdater)
+	settings         settings
+	settingsWin      *mygo.Window
+	cacheUsed        int64 // the bytes the song cache takes, -1 until measured
+	updates          bool  // the update plugin is used (useUpdater)
+	upstreamStatus   [2]string
+	checkingUpstream bool
 
 	restored     bool   // playback picked up where it was left
 	savedSession string // the session as last kept

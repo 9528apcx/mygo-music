@@ -490,6 +490,9 @@ func (a *app) settingsSections(c *ui.Context, p palette) []settingsSection {
 
 	if a.updates {
 		add("updates", T("Updates"), iconRefresh, func(row settingsRow, block settingsBlock) {
+			if mygo.App.Name() == "MyGo Music Custom" {
+				a.upstreamUpdateRows(c, row, p)
+			}
 			desc := T("Check for a new version once a day")
 			if t := lastUpdateCheck(); !t.IsZero() {
 				desc = Tf("Check for a new version once a day. Last checked: %s", i18n.Ago(t, time.Now()))

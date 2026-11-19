@@ -2,6 +2,15 @@ package i18n
 
 // zhCN is the app's text in Simplified Chinese, by its English.
 var zhCN = map[string]string{
+	"Custom NetEase Plugin": "定制版网易云插件",
+	"Player upstream":         "播放器原项目",
+	"NetEase plugin upstream": "网易云插件原项目",
+	"Upstream Updates":        "原项目更新",
+	"Check for upstream changes that have not reached the custom branch": "查看尚未合并到定制分支的原项目更新",
+	"Check Upstream":               "检查原项目",
+	"Unable to check GitHub":       "暂时无法查询 GitHub",
+	"%d upstream commits to merge": "有 %d 个上游提交待合并",
+	"Upstream is synced":           "已同步原项目",
 	"Earlier %.2f s":               "歌词提前 %.2f 秒",
 	"Later %.2f s":                 "歌词延后 %.2f 秒",
 	"Lyrics timing reset":          "歌词同步已归零",
