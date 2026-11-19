@@ -64,7 +64,7 @@ type Player struct {
 	track   *music.Track
 	out     *audio.Player
 	stream  stream
-	watch   *watched // stream, as out plays it
+	watch   *watched      // stream, as out plays it
 	info    *music.Stream // what the current track streams
 	fade    fader
 	gain    float64 // the current track's normalizing gain
@@ -162,6 +162,7 @@ func (p *Player) announce(t *music.Track, artwork []byte) {
 }
 
 func (p *Player) ended() {
+	p.scrobble()
 	if p.repeat == RepeatOne {
 		p.out.Seek(0)
 		p.out.Play()
@@ -601,6 +602,7 @@ func (p *Player) Levels() ([Bands]float32, bool) {
 }
 
 func (p *Player) stop() {
+	p.scrobble()
 	if out := p.out; out != nil {
 		// Paused first, it fades out over a few milliseconds, rather than
 		// stopping with a click.
@@ -656,6 +658,18 @@ func (p *Player) record() {
 	p.recorded = key
 	t := *p.track
 	go src.Played(t)
+}
+
+func (p *Player) scrobble() {
+	if p.watch == nil || p.track == nil {
+		return
+	}
+	samples := p.watch.samples.Swap(0)
+	seconds := samples / int64(p.watch.SampleRate()*p.watch.Channels())
+	if src, ok := p.sourceOf(p.track).(music.Scrobbler); ok && seconds > 0 {
+		t := *p.track
+		go src.Scrobble(t, time.Duration(seconds)*time.Second)
+	}
 }
 
 // loadSkipping loads the track at order[at], to play or not, from from,

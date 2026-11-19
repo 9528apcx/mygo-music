@@ -18,13 +18,16 @@ type watched struct {
 	now func() time.Time
 	// ended hears that a call that took starvedAfter or longer returned,
 	// for what said it's buffering to say so no more.
-	ended func()
-	since atomic.Int64 // when the call on its way began, in Unix nanoseconds, or 0
+	ended   func()
+	since   atomic.Int64 // when the call on its way began, in Unix nanoseconds, or 0
+	samples atomic.Int64 // audio consumed, unaffected by seeking or paused time
 }
 
 func (w *watched) Read(dst []float32) (int, error) {
 	defer w.begin()()
-	return w.stream.Read(dst)
+	n, err := w.stream.Read(dst)
+	w.samples.Add(int64(n))
+	return n, err
 }
 
 func (w *watched) SetPosition(frame int64) error {

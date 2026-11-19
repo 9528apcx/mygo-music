@@ -428,6 +428,11 @@ type Recorder interface {
 	Played(track Track)
 }
 
+// Scrobbler receives the actual audio consumed when a play ends or is skipped.
+type Scrobbler interface {
+	Scrobble(track Track, listened time.Duration)
+}
+
 // Source is where music comes from. Everything but Info and Can may take a
 // while and is called off the main thread. A source that doesn't do something
 // answers ErrUnsupported, and Can says so beforehand for the views to leave it

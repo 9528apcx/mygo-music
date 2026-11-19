@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/url"
 	"strings"
+	"time"
 
 	"mygo-music/internal/music"
 )
@@ -301,6 +302,17 @@ func (p *Plugin) ShareNote(kind, id, text string) error {
 func (p *Plugin) Played(t music.Track) {
 	if err := p.call("played", map[string]any{"id": t.ID}, nil); err != nil && !errors.Is(err, music.ErrUnsupported) {
 		log.Printf("plugin %s: played: %v", p.manifest.ID, err)
+	}
+}
+
+func (p *Plugin) Scrobble(t music.Track, listened time.Duration) {
+	if !p.Can("scrobble") {
+		return
+	}
+	if err := p.call("scrobble", map[string]any{"id": t.ID, "seconds": int64(listened / time.Second)}, nil); err != nil {
+		log.Printf("plugin %s: scrobble: %v", p.manifest.ID, err)
+	} else {
+		log.Printf("plugin %s: scrobble accepted: track %s, %ds", p.manifest.ID, t.ID, int64(listened/time.Second))
 	}
 }
 
