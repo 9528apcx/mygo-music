@@ -56,6 +56,8 @@ type settings struct {
 	// LyricsStage shows lyrics on the stage, Folia's style, in Now
 	// Playing, rather than scrolling.
 	LyricsStage bool `json:"lyricsStage"`
+	// LyricOffsets advances each source/track's lyrics in milliseconds.
+	LyricOffsets map[string]int64 `json:"lyricOffsets,omitempty"`
 	// StageStyle is how the stage sets its lyrics (stageStyles): empty for
 	// Folia's classic, or the id of another of its visualizers.
 	StageStyle string `json:"stageStyle,omitempty"`

@@ -169,7 +169,7 @@ func (a *app) wallSong(c *ui.Context, tr *music.Track, art *artwork, top, h floa
 			if len(lines) == 0 {
 				return
 			}
-			pos := pl.Position()
+			pos := a.lyricPosition(tr)
 			cur := lyrics.Index(lines, pos)
 			// Redraw as the next line begins.
 			if pl.Playing() && cur+1 < len(lines) {

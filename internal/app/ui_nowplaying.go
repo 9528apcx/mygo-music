@@ -280,6 +280,11 @@ func (a *app) nowPlayingView(c *ui.Context) {
 		// Over the backdrop, which is positioned too: positioned elements
 		// paint over those in the flow.
 		ui.Column(c).Absolute().Top(0).Left(0).Right(0).Bottom(0).Children(func() { a.nowPlayingBody(c, tr, art, accent, w, h, pointerIn) })
+		if a.npPane == paneLyrics || a.npPane == paneStage {
+			if lines, _ := pl.Lyrics(); len(lines) > 0 {
+				a.npRise(a.lyricTimingControls(c, tr).Absolute().Top(topBar(c)+npCoverTop).Right(npSideX(w)), 2)
+			}
+		}
 	})
 }
 
@@ -631,7 +636,8 @@ func (a *app) lyricsPane(c *ui.Context, tr *music.Track, h float32) {
 		a.quietCard(c, dim, h*0.18)
 		return
 	}
-	pos := pl.Position()
+	ui.Box(c.Key("lyric-timing-space")).Height(42)
+	pos := a.lyricPosition(tr)
 	cur := lyrics.Index(lines, pos)
 	// Redraw as the next line begins.
 	if pl.Playing() && cur+1 < len(lines) {
@@ -650,7 +656,7 @@ func (a *app) lyricsPane(c *ui.Context, tr *music.Track, h float32) {
 		scroll.Invisible()
 	}
 	defer a.quietCard(c, dim, h*0.18)
-	a.timedLines(c, scroll, lines, pos, cur, lag, linesStyle{size: 30, weight: 800, lineHeight: 1.25, quiet: quiet}, nil)
+	a.timedLines(c, scroll, lines, pos, cur, lag, linesStyle{size: 30, weight: 800, lineHeight: 1.25, quiet: quiet, offset: a.lyricOffset(tr)}, nil)
 }
 
 // linesStyle is how timedLines sets its lines: the size, weight and
@@ -660,6 +666,7 @@ type linesStyle struct {
 	weight     int
 	lineHeight float32
 	quiet      bool
+	offset     time.Duration
 }
 
 // timedLines fills scroll with lines that follow the track playing at
@@ -723,7 +730,7 @@ func (a *app) timedLines(c *ui.Context, scroll ui.Element, lines []lyrics.Line, 
 					})
 				})
 				if line.Clicked() {
-					pl.Seek(l.At)
+					pl.Seek(max(0, l.At-st.offset))
 				}
 				if on {
 					active = line

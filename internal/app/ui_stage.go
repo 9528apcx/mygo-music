@@ -114,7 +114,7 @@ func (a *app) stage(c *ui.Context, tr *music.Track, accent ui.Color) {
 		})
 		return
 	}
-	pos := pl.Position()
+	pos := a.lyricPosition(tr)
 	cur := lyrics.Index(lines, pos)
 	// Under a hot comment there is nothing to move: the quiet asks for
 	// the frame where it ends.

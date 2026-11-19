@@ -2,6 +2,12 @@ package i18n
 
 // zhCN is the app's text in Simplified Chinese, by its English.
 var zhCN = map[string]string{
+	"Earlier %.2f s":               "歌词提前 %.2f 秒",
+	"Later %.2f s":                 "歌词延后 %.2f 秒",
+	"Lyrics timing reset":          "歌词同步已归零",
+	"Lyrics earlier by 0.25 s":     "歌词提前 0.25 秒",
+	"Lyrics later by 0.25 s":       "歌词延后 0.25 秒",
+	"Reset lyrics timing":          "重置歌词同步",
 	"%.1f GB used":                 "已用 %.1f GB",
 	"%d MB used":                   "已用 %d MB",
 	"%d albums":                    "%d 张专辑",
